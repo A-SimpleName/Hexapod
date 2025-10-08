@@ -1,0 +1,33 @@
+{
+
+    "configurations": [
+
+        {
+
+            "name": "Win32",
+
+            "includePath": [
+
+                "${workspaceFolder}/**",
+
+                "C:/Users/20230035/AppData/Local/Arduino15/packages/arduino/libraries/**"
+
+            ],
+
+            "defines": [],
+
+            "compilerPath": "C:/Users/20230035/.arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/bin/",
+
+            "cStandard": "c11",
+
+            "cppStandard": "c++17",
+
+            "intelliSenseMode": "msvc-x64"
+
+        }
+
+    ],
+
+    "version": 4
+
+}
