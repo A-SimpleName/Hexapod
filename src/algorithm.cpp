@@ -1,18 +1,23 @@
 #include <cmath>
-#include <algorithm>
+#include <Arduino.h>
+#include <ESP32Servo.h>
+#include <Adafruit_BusIO_Register.h>
+#include <Adafruit_SPIDevice.h>
+#include <Adafruit_PWMServoDriver.h>
+#include "algorithm.h"
+#include "servocontrols.h"
 
-// arduino-cli lib install "Adafruit PWM Servo Driver Library";
-// arduino-cli lib install "Servo";
-// arduino-cli lib install "Wire";
+double t = 0.0; // Variable für die Zeit, die für die Bewegung benötigt wird
 
-double t = 0.0;
-const double height = 11.0; // Abstand vom Boden in cm
-const double l1 = 3.5;      // Länge des oberen Teils eines Beins (brauch i nur für inverse kinematik type shi)
-const double PI = 3.14159265358979323846;   // π
-
-const double defaultStepHeight = 5.0;
 int legAngles [6][3];
-Point3d lastPoints [6];
+Point3d lastPoints [6] = {
+    {5.4,   height, 5.4 },
+    {5.0,   height, 1.0 },
+    {3.8,   height, 0   },
+    {0,     height, 3.8 },
+    {1.0,   height, 5.0 },
+    {5.4,   height, 5.4 }
+};
 
 bool walking;
 bool walkingDirection;  // true -> forwärts | false -> rückwärts
@@ -41,26 +46,7 @@ Point3d endPoint [6] = {
     {3.8,   height, 0   }
 };
 
-struct Point {
-    double x;
-    double y;
-};
-
-struct Point3d {
-    double x;
-    double y;
-    double z;
-};
-
-void setup() {
-
-    resetPosition(true);
-    wasWalkingForward = true;
-
-}
-
-void loop() {
-
+void walk() {
     bool tempBool = true;
 
     // wenn sich der bot gerade noch nach vorne bzw. hinten bewegt hat und jetz die richtung gewechselt hat, werden start und end Punkte vertauscht
@@ -87,18 +73,18 @@ void loop() {
                     pointToAngles(lastPoint, i);
                     lastPoints[i] = lastPoint;
                 } else {
-                    Point3d lastPoint = getPointBezier(startPoint[i], endPoint[i], defaultStepHeight);
+                    Point3d lastPoint = getPointBezier(startPoint[i], endPoint[i], DEFAULT_STEP_HEIGHT);
                     pointToAngles(lastPoint, i);
                     lastPoints[i] = lastPoint;
                 }
 
-                // moveServo (i, 0, legAngles[i][0]);
-                // moveServo (i, 1, legAngles[i][1]);
-                // moveServo (i, 2, legAngles[i][2]);
+                moveServo (i, 0, legAngles[i][0]);
+                moveServo (i, 1, legAngles[i][1]);
+                moveServo (i, 2, legAngles[i][2]);
             }
 
             t += 0.05;
-            // delay(25);
+            delay(25);
 
             if (t >= 0.7 && cycle == 2) {
                 tempBool = false;
@@ -175,34 +161,37 @@ void rotate() {
     while (rotating) {
         for (int i = 0; i < 6; i += 2) {
             if (i % 2 == 1 && legGroup1) {
-                Point3d lastPoint = getPointBezier({1.0, height, 5.0}, {5.0, height, 1.0}, defaultStepHeight);
+                Point3d lastPoint = getPointBezier({1.0, height, 5.0}, {5.0, height, 1.0}, DEFAULT_STEP_HEIGHT);
                 pointToAngles(lastPoint, i);
                 lastPoints[i] = lastPoint;
 
-                //servo i1 = legAngles[i][0];
-                //servo i2 = legAngles[i][1];
-                //servo i3 = legAngles[i][2];
+                moveServo (i, 0, legAngles[i][0]);
+                moveServo (i, 1, legAngles[i][1]);
+                moveServo (i, 2, legAngles[i][2]);
 
             } else {
                 Point3d lastPoint = getPointLine({5.0, height, 1.0}, {1.0, height, 5.0});
                 pointToAngles(lastPoint, i);
                 lastPoints[i] = lastPoint;
 
-                //servo i1 = legAngles[i][0];
-                //servo i2 = legAngles[i][1];
-                //servo i3 = legAngles[i][2];
+                moveServo (i, 0, legAngles[i][0]);
+                moveServo (i, 1, legAngles[i][1]);
+                moveServo (i, 2, legAngles[i][2]);
             }
         }
 
         t += 0.05;
+        delay(25);
         if (t > 1) {
             t = 0;
     	    legGroup1 = !legGroup1;
         }
     }
+
+    walk();
 }
 
-// true  => wird auf Wlak-Cycle zurückgesetzt
+// true  => wird auf Walk-Cycle zurückgesetzt
 // false => wird auf Rotation-Cycle zurückgesetzt
 void resetPosition(bool tmp) {
 
@@ -219,15 +208,16 @@ void resetPosition(bool tmp) {
             int ctr = 0;
             while (ctr < 2) {
                 for (int i = ctr; i < 6; i += 2) {
-                    Point3d lastPoint = getPointBezier(lastPointCopy[i], startPoint[i], defaultStepHeight);
+                    Point3d lastPoint = getPointBezier(lastPointCopy[i], startPoint[i], DEFAULT_STEP_HEIGHT);
                     pointToAngles(lastPoint, i);
                     lastPoints[i] = lastPoint;
 
-                    //servo i1 = legAngles[i][0];
-                    //servo i2 = legAngles[i][1];
-                    //servo i3 = legAngles[i][2];
+                    moveServo (i, 0, legAngles[i][0]);
+                    moveServo (i, 1, legAngles[i][1]);
+                    moveServo (i, 2, legAngles[i][2]);
 
                     t += 0.2;
+                    delay(25);
                 }
             }
         }
@@ -235,30 +225,32 @@ void resetPosition(bool tmp) {
         t = 0;
         while (t <= 1) {
             for (int i = 0; i < 6; i += 2) {
-                Point3d lastPoint = getPointBezier(lastPointCopy[i], {5.0, height, 1.0}, defaultStepHeight);
+                Point3d lastPoint = getPointBezier(lastPointCopy[i], {5.0, height, 1.0}, DEFAULT_STEP_HEIGHT);
                 pointToAngles(lastPoint, i);
                 lastPoints[i] = lastPoint;
 
-                //servo i1 = legAngles[i][0];
-                //servo i2 = legAngles[i][1];
-                //servo i3 = legAngles[i][2];
+                moveServo (i, 0, legAngles[i][0]);
+                moveServo (i, 1, legAngles[i][1]);
+                moveServo (i, 2, legAngles[i][2]);
 
                 t += 0.2;
+                delay(25);
             }
         }
 
         t = 0;
         while (t <= 1) {
             for (int i = 1; i < 6; i += 2) {
-                Point3d lastPoint = getPointBezier(lastPointCopy[i], {1.0, height, 5.0}, defaultStepHeight);
+                Point3d lastPoint = getPointBezier(lastPointCopy[i], {1.0, height, 5.0}, DEFAULT_STEP_HEIGHT);
                 pointToAngles(lastPoint, i);
                 lastPoints[i] = lastPoint;
 
-                //servo i1 = legAngles[i][0];
-                //servo i2 = legAngles[i][1];
-                //servo i3 = legAngles[i][2];
+                moveServo (i, 0, legAngles[i][0]);
+                moveServo (i, 1, legAngles[i][1]);
+                moveServo (i, 2, legAngles[i][2]);
 
                 t += 0.2;
+                delay(25);
             }
         }
         t = 0;
@@ -302,10 +294,11 @@ void pointToAngles(Point3d p, int leg) {
     // Kosinussastz type shit, rest in README.txt
     beta = 90 + (180 * atan(y / sqrt(pow(originX - x, 2) + pow(originZ - z, 2))) / PI);
     gamma = 180 - (180 * acos((pow(a, 2) + pow(b, 2) - pow(c, 2)) / (2 * a * b)) / PI);
-
+    
     alpha *= 0.833;
 
     legAngles[leg][0] = 75 - alpha + 67;
+    
     legAngles[leg][1] = beta - 27  + 21;
     legAngles[leg][2] = gamma - 27 + 24;
 }
