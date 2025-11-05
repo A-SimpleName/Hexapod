@@ -22,7 +22,7 @@ struct ServoInfo {
 #define SERVOS_PER_LEG 3
 
 int angleToPulse(int angle);
-void moveServo(int board, int channel, int angle);
+void moveServo(int leg, int servo, int angle);
 void setupPWM(Adafruit_PWMServoDriver pwm[]);
 
 extern const ServoInfo servoMap [NUM_LEGS][SERVOS_PER_LEG];

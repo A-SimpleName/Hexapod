@@ -1,8 +1,9 @@
+#include <WiFi.h>
 #include "FS.h"
 #include "SPIFFS.h"
 #include <Arduino.h>
 #include <WebServer.h>
-#include <WiFi.h>
+
 
 #pragma once
 #ifndef WEBSITE_H

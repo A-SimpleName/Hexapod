@@ -1,0 +1,4 @@
+Symbol					Was ist das?				Wie messen?
+L₁	Abstand zwischen Coxa- und Femur-Servoachsen	flach, auf gleicher Höhe
+L₂	Abstand zwischen Femur- und Tibia-Servoachsen	entlang der Verbindung, Bein neutral/gestreckt
+L₃	Abstand zwischen Tibia-Servoachse und Fußspitze	entlang des unteren Glieds

@@ -18,12 +18,12 @@ const ServoInfo servoMap[NUM_LEGS][SERVOS_PER_LEG] = {
 
 void setup() {
     Serial.begin(115200);
-    setupPWM(pwm);
-    setupWebServer();    
+    setupPWM(pwm);    
+    moveServo(0, 1, 100);
 }
 
 void loop() {
-    server.handleClient();
+    
 }
 
 

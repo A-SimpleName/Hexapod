@@ -12,9 +12,9 @@ int angleToPulse(int angle) {
 }
 
 void moveServo(int leg, int servo, int angle) {
-    // Bei Servo 0: 67 und 142 (0-Punkt, links)
-    // Bei Servo 1: 21 (0-Punkt, oben) und 165 sind Grenzen, NICHT darüber bzw. darunter gehen, BÖSE!
-    // Bei Servo 2: 24 (0-Punkt, oben) und 186
+    // Bei Servo 0: 67 und 142 (0-Punkt, links) (Oberste)
+    // Bei Servo 1: 21 (0-Punkt, oben) und 165 sind Grenzen, NICHT darüber bzw. darunter gehen, BÖSE! (Mitte)
+    // Bei Servo 2: 24 (0-Punkt, oben) und 186 (Unten)
     ServoInfo servoInfo = servoMap[leg][servo];
 
     Serial.println("Moving servo " + String(servo) + " of leg " + String(leg) + " to angle: " + angle);

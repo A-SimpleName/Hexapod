@@ -3,7 +3,7 @@
 
 WebServer server(80);
 const char *ssid = "HTL-Perg Gast";
-const char *password = "FIT2024!";
+const char *password = "FIT2025!";
 String lastKeys = "";
 
 void handleRoot() {
