@@ -1,0 +1,3 @@
+[submodule "lib/kinematics"]
+	path = lib/kinematics
+	url = https://github.com/username/kinematics.git
