@@ -18,8 +18,18 @@ const ServoInfo servoMap[NUM_LEGS][SERVOS_PER_LEG] = {
 
 void setup() {
     Serial.begin(115200);
-    setupPWM(pwm);    
-    moveServo(0, 1, 100);
+    setupPWM(pwm);        // PWM Boards initialisieren
+    delay(500);
+
+    // Alle Beine in "0-Punkt"-Neutralpose fahren
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        moveServo(leg, 0, 67);  // Coxa 0-Punkt
+        moveServo(leg, 1, 21);  // Femur 0-Punkt
+        moveServo(leg, 2, 24);  // Tibia 0-Punkt
+        delay(50);
+    }
+
+    Serial.println("Alle Beine in Neutralpose.");
 }
 
 void loop() {

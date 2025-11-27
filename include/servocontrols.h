@@ -1,3 +1,5 @@
+#pragma once
+
 #include <Arduino.h>
 #include <ESP32Servo.h>
 #include <Adafruit_BusIO_Register.h>
@@ -24,6 +26,9 @@ struct ServoInfo {
 int angleToPulse(int angle);
 void moveServo(int leg, int servo, int angle);
 void setupPWM(Adafruit_PWMServoDriver pwm[]);
+void writeServosUs(int leg, int joint, int us);
+
+
 
 extern const ServoInfo servoMap [NUM_LEGS][SERVOS_PER_LEG];
 extern Adafruit_PWMServoDriver pwm[2];
