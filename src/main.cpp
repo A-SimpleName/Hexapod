@@ -36,6 +36,10 @@ void setup() {
 
 
 void loop() {
+
+    for (int i = 0; i < 5; i++) {
+        moveServo(i, 1, 90); // Bein 0, Femur beugen/strecken
+    }
     static int angle = 21;
     static int dir   = +1;
 
@@ -48,5 +52,7 @@ void loop() {
     
     if (angle > 165 || angle < 21) dir *= -1;
     delay(20);
+
+    waveLegs();
 }
 
