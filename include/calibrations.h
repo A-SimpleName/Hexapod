@@ -1,13 +1,13 @@
 #ifndef CALIBRATIONS_H
 #define CALIBRATIONS_H
 
-#define FEMUR_OFFSET_ZERO 104.5f  
-#define FEMUR_MIN 67
-#define FEMUR_MAX 142
+#define COXA_OFFSET_ZERO 104.5f  
+#define COXA_MIN 67
+#define COXA_MAX 142
 
-#define COXA_OFFSET_ZERO 144
-#define COXA_MIN 21
-#define COXA_MAX 165
+#define FEMUR_OFFSET_ZERO 144
+#define FEMUR_MIN 21
+#define FEMUR_MAX 165
 
 #define TIBIA_OFFSET_ZERO 105
 #define TIBIA_MIN 24

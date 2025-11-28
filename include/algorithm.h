@@ -9,7 +9,7 @@
 
 
 
-
+void waveLegs();
 void initLegs();
 void walkForward(uint16_t steps);
 

@@ -51,7 +51,7 @@ void waveLegs() {
   for (;;) {  
     for (uint16_t i = 0; i < 6; i++) {
       servoAngle = angle + (165.0f / 6.0f * i);
-      moveServo(i, 1, (angle > 165.0f) ? 165.0f - (angle - 144.0f) : angle);
+      moveServo(i, 1, (angle > FEMUR_MAX) ? FEMUR_MAX - (angle - 144.0f) : angle);
     }
     angle += 1.0f;
     angle = fmod((angle - 21.0f), 288.0f) + 21.0f;
