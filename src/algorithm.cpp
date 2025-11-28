@@ -86,3 +86,16 @@ void walkForward(uint16_t steps) {
         
     }
 }
+
+void waveLegs(uint16_t waves) {
+  int angle = 0;
+  for (;;) {  
+    for (uint16_t i = 0; i < 6; i++) {
+      moveServo(i, 1, angle);
+    }
+    angle += 2;
+    angle = (angle - 21) % 288 + 21;
+    // angle > 165 || angle < 21;
+    delay(50);
+  }
+}
