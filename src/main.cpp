@@ -38,21 +38,19 @@ void setup() {
 void loop() {
 
     for (int i = 0; i < 5; i++) {
-        moveServo(i, 1, 90); // Bein 0, Femur beugen/strecken
+        int angle = 21;
+        int dir   = +1;
+        
+        for (uint16_t j = 0;  j < NUM_LEGS; j++) {
+            angle += dir * 2;
+
+            moveServo(j, 1, angle); // Bein 0, Femur beugen/strecken
+        }
+        
+        if (angle > 165 || angle < 21) dir *= -1;
+        delay(20);
+        
     }
-    static int angle = 21;
-    static int dir   = +1;
-
-    
-    for (uint16_t i = 0; i < NUM_LEGS; i++) {
-        angle += dir * 2;
-
-        moveServo(i, 1, angle); // Bein 0, Femur beugen/strecken
-    }
-    
-    if (angle > 165 || angle < 21) dir *= -1;
-    delay(20);
-
     waveLegs();
 }
 
