@@ -1,4 +1,4 @@
-.pio
-platformio.ini
-.vscode/
-lib/
+./.pio
+./platformio.ini
+./.vscode/
+./lib/
