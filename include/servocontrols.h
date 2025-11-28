@@ -15,12 +15,6 @@
 #define L2 38.0
 #define L3 81.0
 
-#define MAX_ANGLE_SERVO_0 142
-#define MAX_ANGLE_SERVO_1 165
-#define MAX_ANGLE_SERVO_2 186
-#define MIN_ANGLE_SERVO_0 67
-#define MIN_ANGLE_SERVO_1 21
-#define MIN_ANGLE_SERVO_2 24
 #define NUM_LEGS 6
 #define SERVOS_PER_LEG 3
 
@@ -29,22 +23,23 @@ struct ServoInfo {
     int channel;
 };
 
+struct JointState {
+    float angle;
+    int dir;
+};
+
 extern Adafruit_PWMServoDriver pwm[2];
 extern Kinematics legs[6];
+extern const ServoInfo servoMap [NUM_LEGS][SERVOS_PER_LEG];
 
-extern float angle_coxa;
-extern float angle_femur;
-extern float angle_tibia;
-extern int dir_femur;
-extern int dir_coxa;
-extern int dir_tibia;
+extern JointState coxa[NUM_LEGS];
+extern JointState femur[NUM_LEGS];
+extern JointState tibia[NUM_LEGS];
 
+void initJointStates();
 int angleToPulse(int angle);
 void moveServo(int leg, int servo, int angle);
 void setupPWM(Adafruit_PWMServoDriver pwm[]);
 void writeServosUs(int leg, int joint, int us);
-
-extern const ServoInfo servoMap [NUM_LEGS][SERVOS_PER_LEG];
-extern Adafruit_PWMServoDriver pwm[2];
 
 #endif

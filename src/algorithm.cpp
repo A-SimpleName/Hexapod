@@ -45,22 +45,6 @@ void walkForward(uint16_t steps) {
     }
 }
 
-/*
-void waveLegs() {
-  float angle = FEMUR_MIN;
-  float servoAngle = angle;
-  for (int j = 0; j < 5; j++) {  
-    for (uint16_t i = 0; i < 6; i++) {
-      servoAngle = angle;
-      moveServo(i, 1, (servoAngle > FEMUR_MAX) ? FEMUR_MAX - (servoAngle - FEMUR_MAX) : servoAngle);
-    }
-    angle += 1.0f;
-    angle = fmod((angle - 21.0f), 288.0f) + 21.0f;
-    delay(60);
-  }
-}
-*/
-
 static float legOffsets[NUM_LEGS] = {0, 57.6, 115.2, 172.8, 230.4, 288.0};  
 
 void waveLegs() {
@@ -82,31 +66,24 @@ void waveLegs() {
 
 void circleJerk() {
     for (int i = 0; i < NUM_LEGS; i++) {
-        moveServo(i, 0, angle_coxa);
+        moveServo(i, 0, coxa[i].angle);
+        coxa[i].angle += coxa[i].dir * 2;
+        if (coxa[i].angle <= COXA_MIN || coxa[i].angle >= COXA_MAX) {
+            coxa[i].dir = -coxa[i].dir;
+        }
 
-        moveServo(i, 1, angle_femur);
+        moveServo(i, 1, femur[i].angle);
+        femur[i].angle += femur[i].dir * 2;
+        if (femur[i].angle <= FEMUR_MIN || femur[i].angle >= FEMUR_MAX) {
+            femur[i].dir = -femur[i].dir;
+        }
 
-        moveServo(i, 2, angle_tibia);
-        
+        moveServo(i, 2, tibia[i].angle);
+        tibia[i].angle += tibia[i].dir * 2;
+        if (tibia[i].angle <= TIBIA_MIN || tibia[i].angle >= TIBIA_MAX) {
+            tibia[i].dir = -tibia[i].dir;
+        }
+
     }
-
-    angle_coxa += dir_coxa * 2;
-    angle_femur += dir_femur * 2;
-    angle_tibia += dir_tibia * 2;
-
-    if (angle_femur >= FEMUR_MAX || angle_femur <= FEMUR_MIN) {
-        dir_femur = -dir_femur;
-    }
-
-    if (angle_tibia >= TIBIA_MAX || angle_tibia <= TIBIA_MIN) {
-        dir_tibia = -dir_tibia;
-    }
-
-    if (angle_coxa >= COXA_MAX || angle_coxa <= COXA_MIN) {
-        dir_coxa = -dir_coxa;
-    }
-
-
-
     delay(10);
 }

@@ -1,11 +1,17 @@
 #include "servocontrols.h"
 
-float angle_coxa = COXA_MIN;
-float angle_femur = FEMUR_MIN;
-float angle_tibia = TIBIA_MIN;
-int dir_femur = 1;
-int dir_coxa = 1;
-int dir_tibia = 1;
+JointState coxa[NUM_LEGS];
+JointState femur[NUM_LEGS];
+JointState tibia[NUM_LEGS];
+
+const ServoInfo servoMap[NUM_LEGS][SERVOS_PER_LEG] = {
+    {{0, 13}, {0, 14}, {0, 15}},
+    {{0, 5},  {0, 6},  {0, 7}},
+    {{0, 0},  {0, 1},  {0, 2}},
+    {{1, 13}, {1, 14}, {1, 15}},
+    {{1, 8},  {1, 9},  {1, 10}},
+    {{1, 0},  {1, 1},  {1, 2}},
+};
 
 Adafruit_PWMServoDriver pwm[2] = {
     Adafruit_PWMServoDriver(0x40), // Board 0
@@ -20,6 +26,14 @@ Kinematics legs[6] = {
     Kinematics(3),
     Kinematics(3)
 };
+
+void initJointStates() {
+    for (int i = 0; i < NUM_LEGS; ++i) {
+        coxa[i] = {COXA_MIN, 1};
+        femur[i] = {FEMUR_MIN, 1};
+        tibia[i] = {TIBIA_MIN, 1};
+    }
+}
 
 int angleToPulse(int angle) {
     int minPulse = 121;
@@ -36,13 +50,13 @@ void moveServo(int leg, int servo, int angle) {
     // Begrenzung der Winkel für die Servos
     if (servo == 1) {
         // Servo 1 muss auf 21 Grad gesetzt werden, da dieser auf der anderen Achse arbeitet
-        angle = constrain(angle, MIN_ANGLE_SERVO_1, MAX_ANGLE_SERVO_1);
+        angle = constrain(angle, FEMUR_MIN, FEMUR_MAX);
     } else if (servo == 2) {
         // Servo 2 muss auf 24 Grad gesetzt werden, da dieser auf der anderen Achse arbeitet
-        angle = constrain(angle, MIN_ANGLE_SERVO_2, MAX_ANGLE_SERVO_2);
+        angle = constrain(angle, TIBIA_MIN, TIBIA_MAX);
     } else {
         // Servo 0 muss auf 67 Grad gesetzt werden, da dieser auf der anderen Achse arbeitet
-        angle = constrain(angle, MIN_ANGLE_SERVO_0, MAX_ANGLE_SERVO_0);
+        angle = constrain(angle, COXA_MIN, COXA_MAX);
     }
     
     pwm[servoInfo.board].setPWM(servoInfo.channel, 0, angleToPulse(angle));
