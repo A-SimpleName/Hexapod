@@ -37,6 +37,7 @@ void setup() {
 
 void loop() {
 
+    /*
     for (int i = 0; i < 5; i++) {
         int angle = 21;
         int dir   = +1;
@@ -50,7 +51,7 @@ void loop() {
         if (angle > 165 || angle < 21) dir *= -1;
         delay(20);
         
-    }
+    }*/
     waveLegs();
 }
 

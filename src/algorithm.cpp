@@ -45,19 +45,39 @@ void walkForward(uint16_t steps) {
     }
 }
 
+/*
 void waveLegs() {
-  float angle = 0;
-  float servoAngle = 0;
+  float angle = FEMUR_MIN;
+  float servoAngle = angle;
   for (int j = 0; j < 5; j++) {  
     for (uint16_t i = 0; i < 6; i++) {
-      servoAngle = angle + (165.0f / 6.0f * i);
-      moveServo(i, 1, (servoAngle > FEMUR_MAX) ? FEMUR_MAX - (servoAngle - 144.0f) : servoAngle);
+      servoAngle = angle;
+      moveServo(i, 1, (servoAngle > FEMUR_MAX) ? FEMUR_MAX - (servoAngle - FEMUR_MAX) : servoAngle);
     }
     angle += 1.0f;
     angle = fmod((angle - 21.0f), 288.0f) + 21.0f;
-    // angle > 165 || angle < 21;
-    delay(15);
+    delay(60);
   }
+}
+*/
+
+static float legOffsets[NUM_LEGS] = {0, 57.6, 115.2, 172.8, 230.4, 288.0};  
+
+void waveLegs() {
+    static float t = 0.0f;  // time or phase
+    float mid = (FEMUR_MIN + FEMUR_MAX) / 2.0f;
+    float amplitude = (FEMUR_MAX - FEMUR_MIN) / 2.0f;
+
+    for (uint16_t i = 0; i < NUM_LEGS; i++) {
+        // Convert offset to radians for sine
+        float phase = legOffsets[i] * (PI / 180.0f);
+        float servoAngle = mid + amplitude * sin(t + phase);
+
+        moveServo(i, 1, servoAngle);
+    }
+
+    t += 0.1f;  // increment time, controls speed
+    delay(30);  // adjust delay as needed
 }
 
 void circleJerk() {
