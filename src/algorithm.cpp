@@ -1,15 +1,7 @@
 #include "algorithm.h"
+#include "calibrations.h"
+#include "servocontrols.h"
 
-Kinematics legs[6] = {
-    Kinematics(3),
-    Kinematics(3),
-    Kinematics(3),
-    Kinematics(3),
-    Kinematics(3),
-    Kinematics(3)
-};
-
-#include "algorithm.h"
 
 
 static inline int mapToUs(int deg, int inMin, int inMax, int outMin, int outMax) {

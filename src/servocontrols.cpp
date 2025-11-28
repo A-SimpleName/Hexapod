@@ -5,6 +5,15 @@ Adafruit_PWMServoDriver pwm[2] = {
     Adafruit_PWMServoDriver(0x41)  // Board 1
 };
 
+Kinematics legs[6] = {
+    Kinematics(3),
+    Kinematics(3),
+    Kinematics(3),
+    Kinematics(3),
+    Kinematics(3),
+    Kinematics(3)
+};
+
 int angleToPulse(int angle) {
     int minPulse = 121;
     int maxPulse = 486;
@@ -16,8 +25,6 @@ void moveServo(int leg, int servo, int angle) {
     // Bei Servo 1: 21 (0-Punkt, oben) und 165 sind Grenzen, NICHT darüber bzw. darunter gehen, BÖSE! (Mitte)
     // Bei Servo 2: 24 (0-Punkt, oben) und 186 (Unten)
     ServoInfo servoInfo = servoMap[leg][servo];
-
-    Serial.println("Moving servo " + String(servo) + " of leg " + String(leg) + " to angle: " + angle);
 
     // Begrenzung der Winkel für die Servos
     if (servo == 1) {
@@ -35,12 +42,10 @@ void moveServo(int leg, int servo, int angle) {
 }
 
 void setupPWM(Adafruit_PWMServoDriver pwm[]) {
-    Serial.println("Initializing PWMServoDriver...");
 
     pwm[0].begin();
     pwm[0].setPWMFreq(50); // 50 Hz... Standard frequency for servo motors
     pwm[1].begin();
     pwm[1].setPWMFreq(50);
 
-    Serial.println("PWMServoDriver initialized.");
 }

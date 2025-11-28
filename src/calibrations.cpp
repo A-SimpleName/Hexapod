@@ -4,33 +4,34 @@
 // dir = +1 erstmal überall, Drehrichtung kannst du danach Bein für Bein anpassen.
 JointCal CAL[6][3] = {
 /* Leg 0 */ {
-  /* COXA  (Servo 0) */ { 67.0f, +1.0f,  67.0f, 142.0f,  500, 2500 },
-  /* FEMUR (Servo 1) */ { 21.0f, +1.0f,  21.0f, 165.0f,  500, 2500 },
-  /* TIBIA (Servo 2) */ { 24.0f, +1.0f,  24.0f, 186.0f,  500, 2500 }
+  /* COXA  (Servo 0) */ { COXA_OFFSET_ZERO, +1.0f,  COXA_MIN, COXA_MAX,  500, 2500 },
+  /* FEMUR (Servo 1) */ { FEMUR_OFFSET_ZERO, +1.0f,  FEMUR_MIN, FEMUR_MAX,  500, 2500 },
+  /* TIBIA (Servo 2) */ { TIBIA_OFFSET_ZERO, +1.0f,  TIBIA_MIN, TIBIA_MAX,  500, 2500 }
 },
 /* Leg 1 */ {
-  { 67.0f, +1.0f,  67.0f, 142.0f,  500, 2500 },
-  { 21.0f, +1.0f,  21.0f, 165.0f,  500, 2500 },
-  { 24.0f, +1.0f,  24.0f, 186.0f,  500, 2500 }
+  { COXA_OFFSET_ZERO, +1.0f,  COXA_MIN, COXA_MAX,  500, 2500 },
+  { FEMUR_OFFSET_ZERO, +1.0f,  FEMUR_MIN, FEMUR_MAX,  500, 2500 },
+  { TIBIA_OFFSET_ZERO, +1.0f,  TIBIA_MIN, TIBIA_MAX,  500, 2500 }
 },
 /* Leg 2 */ {
-  { 67.0f, +1.0f,  67.0f, 142.0f,  500, 2500 },
-  { 21.0f, +1.0f,  21.0f, 165.0f,  500, 2500 },
-  { 24.0f, +1.0f,  24.0f, 186.0f,  500, 2500 }
+  { COXA_OFFSET_ZERO, +1.0f,  COXA_MIN, COXA_MAX,  500, 2500 },
+  { FEMUR_OFFSET_ZERO, +1.0f,  FEMUR_MIN, FEMUR_MAX,  500, 2500 },
+  { TIBIA_OFFSET_ZERO, +1.0f,  TIBIA_MIN, TIBIA_MAX,  500, 2500 }
 },
 /* Leg 3 */ {
-  { 67.0f, +1.0f,  67.0f, 142.0f,  500, 2500 },
-  { 21.0f, +1.0f,  21.0f, 165.0f,  500, 2500 },
-  { 24.0f, +1.0f,  24.0f, 186.0f,  500, 2500 }
+  { COXA_OFFSET_ZERO, +1.0f,  COXA_MIN, COXA_MAX,  500, 2500 },
+  { FEMUR_OFFSET_ZERO, +1.0f,  FEMUR_MIN, FEMUR_MAX,  500, 2500 },
+  { TIBIA_OFFSET_ZERO, +1.0f,  TIBIA_MIN, TIBIA_MAX,  500, 2500 }
 },
 /* Leg 4 */ {
-  { 67.0f, +1.0f,  67.0f, 142.0f,  500, 2500 },
-  { 21.0f, +1.0f,  21.0f, 165.0f,  500, 2500 },
-  { 24.0f, +1.0f,  24.0f, 186.0f,  500, 2500 }
+  { COXA_OFFSET_ZERO, +1.0f,  COXA_MIN, COXA_MAX,  500, 2500 },
+  { FEMUR_OFFSET_ZERO, +1.0f,  FEMUR_MIN, FEMUR_MAX,  500, 2500 },
+  { TIBIA_OFFSET_ZERO, +1.0f,  TIBIA_MIN, TIBIA_MAX,  500, 2500 }
 },
 /* Leg 5 */ {
-  { 67.0f, +1.0f,  67.0f, 142.0f,  500, 2500 },
-  { 21.0f, +1.0f,  21.0f, 165.0f,  500, 2500 },
-  { 24.0f, +1.0f,  24.0f, 186.0f,  500, 2500 }
+  { COXA_OFFSET_ZERO, +1.0f,  COXA_MIN, COXA_MAX,  500, 2500 },
+  { FEMUR_OFFSET_ZERO, +1.0f,  FEMUR_MIN, FEMUR_MAX,  500, 2500 },
+  { TIBIA_OFFSET_ZERO, +1.0f,  TIBIA_MIN, TIBIA_MAX,  500, 2500 }
 },
 };
+
