@@ -45,34 +45,34 @@ void walkForward(uint16_t steps) {
     }
 }
 
-void waveLegs() {
-  float angle = 0;
-  float servoAngle = 0;
-  for (int j = 0; j < 5; j++) {  
-    for (uint16_t i = 0; i < 6; i++) {
-      servoAngle = angle + (165.0f / 6.0f * i);
-      moveServo(i, 1, (servoAngle > FEMUR_MAX) ? FEMUR_MAX - (servoAngle - 144.0f) : servoAngle);
-    }
-    angle += 1.0f;
-    angle = fmod((angle - 21.0f), 288.0f) + 21.0f;
-    // angle > 165 || angle < 21;
-    delay(15);
-  }
-}
 
 void circleJerk() {
-  float lbCoxa = 67;
-  float lbFemur = 21;
-  float lbTibia = 24;
+    for (int i = 0; i < NUM_LEGS; i++) {
+        moveServo(i, 0, angle_coxa);
 
-  float ubCoxa = 142;
-  float ubFemur = 165;
-  float ubTibia = 186;
+        moveServo(i, 1, angle_femur);
 
-  for (;;) {  
-    for (uint16_t i = 0; i < 6; i++) {
-      
+        moveServo(i, 2, angle_tibia);
+        
     }
-    delay(15);
-  }
+
+    angle_coxa += dir_coxa * 2;
+    angle_femur += dir_femur * 2;
+    angle_tibia += dir_tibia * 2;
+
+    if (angle_femur >= FEMUR_MAX || angle_femur <= FEMUR_MIN) {
+        dir_femur = -dir_femur;
+    }
+
+    if (angle_tibia >= TIBIA_MAX || angle_tibia <= TIBIA_MIN) {
+        dir_tibia = -dir_tibia;
+    }
+
+    if (angle_coxa >= COXA_MAX || angle_coxa <= COXA_MIN) {
+        dir_coxa = -dir_coxa;
+    }
+
+
+
+    delay(10);
 }

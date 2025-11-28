@@ -32,6 +32,13 @@ struct ServoInfo {
 extern Adafruit_PWMServoDriver pwm[2];
 extern Kinematics legs[6];
 
+extern float angle_coxa;
+extern float angle_femur;
+extern float angle_tibia;
+extern int dir_femur;
+extern int dir_coxa;
+extern int dir_tibia;
+
 int angleToPulse(int angle);
 void moveServo(int leg, int servo, int angle);
 void setupPWM(Adafruit_PWMServoDriver pwm[]);

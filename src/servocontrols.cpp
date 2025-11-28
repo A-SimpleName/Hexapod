@@ -1,5 +1,12 @@
 #include "servocontrols.h"
 
+float angle_coxa = COXA_MIN;
+float angle_femur = FEMUR_MIN;
+float angle_tibia = TIBIA_MIN;
+int dir_femur = 1;
+int dir_coxa = 1;
+int dir_tibia = 1;
+
 Adafruit_PWMServoDriver pwm[2] = {
     Adafruit_PWMServoDriver(0x40), // Board 0
     Adafruit_PWMServoDriver(0x41)  // Board 1
