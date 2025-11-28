@@ -1,4 +1,5 @@
 #include "algorithm.h"
+#include "servocontrols.h"
 
 Kinematics legs[6] = {
     Kinematics(3),
@@ -8,8 +9,6 @@ Kinematics legs[6] = {
     Kinematics(3),
     Kinematics(3)
 };
-
-#include "algorithm.h"
 
 
 static inline int mapToUs(int deg, int inMin, int inMax, int outMin, int outMax) {
@@ -57,7 +56,7 @@ void waveLegs(uint16_t waves) {
   int angle = 0;
   for (;;) {  
     for (uint16_t i = 0; i < 6; i++) {
-      moveServo(i, 1, angle);
+      moveServo(i, 1, (angle > 165) ? 165 - (angle - 144) : angle);
     }
     angle += 2;
     angle = (angle - 21) % 288 + 21;
