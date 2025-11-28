@@ -53,16 +53,33 @@ void walkForward(uint16_t steps) {
 }
 
 void waveLegs() {
-  int angle = 0;
-  int servoAngle = 0;
+  float angle = 0;
+  float servoAngle = 0;
   for (;;) {  
     for (uint16_t i = 0; i < 6; i++) {
-      servoAngle = angle + (165 / 6 * i);
-      moveServo(i, 1, (angle > 165) ? 165 - (angle - 144) : angle);
+      servoAngle = angle + (165.0f / 6.0f * i);
+      moveServo(i, 1, (angle > 165.0f) ? 165.0f - (angle - 144.0f) : angle);
     }
-    angle += 2;
-    angle = (angle - 21) % 288 + 21;
+    angle += 1.0f;
+    angle = fmod((angle - 21.0f), 288.0f) + 21.0f;
     // angle > 165 || angle < 21;
-    delay(50);
+    delay(15);
+  }
+}
+
+void circleJerk() {
+  float lbCoxa = 67;
+  float lbFemur = 21;
+  float lbTibia = 24;
+
+  float ubCoxa = 142;
+  float ubFemur = 165;
+  float ubTibia = 186;
+
+  for (;;) {  
+    for (uint16_t i = 0; i < 6; i++) {
+      
+    }
+    delay(15);
   }
 }
