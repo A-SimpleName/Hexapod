@@ -52,10 +52,12 @@ void walkForward(uint16_t steps) {
     }
 }
 
-void waveLegs(uint16_t waves) {
+void waveLegs() {
   int angle = 0;
+  int servoAngle = 0;
   for (;;) {  
     for (uint16_t i = 0; i < 6; i++) {
+      servoAngle = angle + (165 / 6 * i);
       moveServo(i, 1, (angle > 165) ? 165 - (angle - 144) : angle);
     }
     angle += 2;
