@@ -55,7 +55,7 @@ void walkForward(uint16_t steps) {
 void waveLegs() {
   float angle = 0;
   float servoAngle = 0;
-  for (;;) {  
+  for (int j = 0; j < 5; j++) {  
     for (uint16_t i = 0; i < 6; i++) {
       servoAngle = angle + (165.0f / 6.0f * i);
       moveServo(i, 1, (angle > 165.0f) ? 165.0f - (angle - 144.0f) : angle);
