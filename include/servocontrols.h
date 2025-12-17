@@ -12,7 +12,7 @@
 #define SERVOCONTROLS_H
 
 #define L1 32.0
-#define L2 38.0
+#define L2 43.0
 #define L3 81.0
 
 #define NUM_LEGS 6
