@@ -39,11 +39,6 @@ void initLegs() {
 
 
 
-void walkForward(uint16_t steps) {
-    for (uint16_t i = 0; i < steps; i++) {
-        
-    }
-}
 
 void waveLegs(float legOffsets[], float speed) {
     static float t = 0.0f;  // time or phase
