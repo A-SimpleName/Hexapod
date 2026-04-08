@@ -45,7 +45,8 @@ void setup() {
 
 void loop() {
     pollUdpCommands();
-    runActiveCommand();
+    walk(0.0f);
+    //runActiveCommand();
 }
 
 

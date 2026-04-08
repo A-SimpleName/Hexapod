@@ -42,10 +42,5 @@ void setupPWM(Adafruit_PWMServoDriver pwm[]);
 void stopAllServos();
 void recoverPwmDrivers();
 void writeServosUs(int leg, int joint, int us);
-void calcCurrentPoint(vec3 &startingPoint, vec3 &endPoint, vec3 &current_point_line, vec3 &current_point_bezier, float t);
-void calcCurrentAngles(vec3 &current_point_line, vec3 &current_point_bezier, vec3 &angles_line, vec3 &angles_bezier, float t);
-void calcPoints(vec3 p1 [], vec3 p2 [], float theta);
-float toRad(float deg);
-float lerp(float p1, float p2, float t);
 
 #endif
