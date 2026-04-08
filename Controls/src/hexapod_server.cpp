@@ -6,8 +6,8 @@
 
 WiFiUDP udp;
 constexpr int udpPort = 4210;
-const char *ssid = "HTL-Perg Gast";
-const char *password = "FIT2024!";
+const char *apSsid = "Hexapod-ESP32";
+const char *apPassword = "hexapod123";
 
 enum class ActiveCommand {
     None,
@@ -17,48 +17,40 @@ enum class ActiveCommand {
 };
 
 static ActiveCommand currentCommand = ActiveCommand::None;
-static unsigned long lastWifiAttemptMs = 0;
 static float currentMoveThetaDeg = 0.0f;
 static long lastSessionId = -1;
 static long lastProcessedSeq = -1;
 static bool wifiEventHandlerRegistered = false;
 
 static void onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
-    if (event == ARDUINO_EVENT_WIFI_STA_CONNECTED) {
-        Serial.println("[WiFi] STA connected to AP");
-    } else if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) {
-        Serial.print("[WiFi] STA disconnected, reason=");
-        Serial.println((int)info.wifi_sta_disconnected.reason);
+    if (event == ARDUINO_EVENT_WIFI_AP_STACONNECTED) {
+        Serial.print("[WiFi] Client connected to AP, AID=");
+        Serial.println((int)info.wifi_ap_staconnected.aid);
+    } else if (event == ARDUINO_EVENT_WIFI_AP_STADISCONNECTED) {
+        Serial.print("[WiFi] Client disconnected from AP, AID=");
+        Serial.println((int)info.wifi_ap_stadisconnected.aid);
     }
 }
 
-static void startWifiConnect() {
+static void startWifiAp() {
     if (!wifiEventHandlerRegistered) {
         WiFi.onEvent(onWiFiEvent);
         wifiEventHandlerRegistered = true;
     }
 
-    WiFi.mode(WIFI_STA);
+    WiFi.mode(WIFI_AP);
     WiFi.setTxPower(WIFI_POWER_19_5dBm);
     WiFi.setSleep(false);
-    WiFi.setAutoReconnect(true);
-    WiFi.setAutoConnect(true);
     WiFi.persistent(false);
 
-    // Keep reconnect lightweight; avoid forced disconnect loops.
-    WiFi.begin(ssid, password);
-    lastWifiAttemptMs = millis();
-}
+    const IPAddress apIp(192, 168, 4, 1);
+    const IPAddress gateway(192, 168, 4, 1);
+    const IPAddress subnet(255, 255, 255, 0);
+    WiFi.softAPConfig(apIp, gateway, subnet);
 
-static void maintainWiFiConnection() {
-    if (WiFi.status() == WL_CONNECTED) {
-        return;
-    }
-
-    const unsigned long now = millis();
-    if (now - lastWifiAttemptMs >= 10000UL) {
-        Serial.println("[WiFi] reconnect attempt");
-        startWifiConnect();
+    const bool apStarted = WiFi.softAP(apSsid, apPassword);
+    if (!apStarted) {
+        Serial.println("[WiFi] FEHLER: SoftAP konnte nicht gestartet werden");
     }
 }
 
@@ -190,41 +182,25 @@ void setupWebServer() {
     udp.begin(udpPort);
 
     Serial.println("Network services started:");
+    Serial.print("  AP SSID: ");
+    Serial.println(apSsid);
     Serial.print("  UDP commands: ");
-    Serial.print(WiFi.localIP());
+    Serial.print(WiFi.softAPIP());
     Serial.print(":");
     Serial.println(udpPort);
 }
 
 void connectWiFi() {
-    startWifiConnect();
+    startWifiAp();
 
-    Serial.print("Connecting to WiFi");
-    const unsigned long started = millis();
-    while (WiFi.status() != WL_CONNECTED && (millis() - started) < 25000UL) {
-        delay(500);
-        Serial.print(".");
-    }
-
-    if (WiFi.status() == WL_CONNECTED) {
-        Serial.println(" WiFi connected");
-        Serial.print("[WiFi] IP: ");
-        Serial.println(WiFi.localIP());
-        Serial.print("[WiFi] RSSI: ");
-        Serial.println(WiFi.RSSI());
-    } else {
-        Serial.println(" WiFi timeout - continuing, will retry in background");
-        Serial.print("[WiFi] status code: ");
-        Serial.println((int)WiFi.status());
-    }
+    Serial.println("[WiFi] SoftAP gestartet");
+    Serial.print("[WiFi] SSID: ");
+    Serial.println(apSsid);
+    Serial.print("[WiFi] AP IP: ");
+    Serial.println(WiFi.softAPIP());
 }
 
 void pollUdpCommands() {
-    maintainWiFiConnection();
-    if (WiFi.status() != WL_CONNECTED) {
-        return;
-    }
-
     int packetSize = udp.parsePacket();
     if (packetSize <= 0) {
         return;

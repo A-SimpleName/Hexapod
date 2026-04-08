@@ -12,7 +12,7 @@ void connectWiFi();
 void pollUdpCommands();
 void runActiveCommand();
 
-extern const char* ssid;
-extern const char* password;
+extern const char* apSsid;
+extern const char* apPassword;
 
 #endif

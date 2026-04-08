@@ -5,7 +5,7 @@ import 'package:app/pages/settings.dart';
 import 'package:app/services/send_to_esp.dart';
 
 
-UdpHexapodClient udpClient = UdpHexapodClient('172.16.95.60');
+UdpHexapodClient udpClient = UdpHexapodClient('192.168.4.1');
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
