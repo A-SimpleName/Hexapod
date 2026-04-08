@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:app/pages/home_page.dart';
 import 'package:app/pages/settings.dart';
 import 'package:app/services/send_to_esp.dart';
 
 
-UdpHexapodClient udpClient = UdpHexapodClient('172.16.95.59');
+UdpHexapodClient udpClient = UdpHexapodClient('172.16.95.60');
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]);
 
   try {
     await udpClient.start();
@@ -41,7 +47,7 @@ class MyApp extends StatelessWidget {
         //
         // This works for code too, not just values: Most code changes can be
         // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
       initialRoute: 'HomePage',
       routes: {

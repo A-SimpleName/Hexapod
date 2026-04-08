@@ -35,18 +35,19 @@ void setup() {
     Serial.printf("[BOOT] Reset reason: %s (%d)\n", resetReasonToString(reason), (int)reason);
     Serial.printf("[BOOT] CPU freq: %u MHz\n", getCpuFrequencyMhz());
 
+    // Join WiFi before powering servo drivers to avoid RF/auth instability on weak rails.
+    connectWiFi();
+
     setupPWM(pwm);
     delay(500);
     initJointStates();
 
-    connectWiFi();
     setupWebServer();
 }
 
 void loop() {
     pollUdpCommands();
-    walk(0.0f);
-    //runActiveCommand();
+    runActiveCommand();
 }
 
 

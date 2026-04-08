@@ -9,6 +9,8 @@ class UdpHexapodClient {
 
   RawDatagramSocket? _socket;
   Future<void>? _startFuture;
+  final int _sessionId = DateTime.now().millisecondsSinceEpoch & 0x7fffffff;
+  int _nextSequence = 1;
 
   UdpHexapodClient(String ip, {this.espPort = 4210})
       : espIp = InternetAddress(ip);
@@ -33,7 +35,10 @@ class UdpHexapodClient {
       return false;
     }
 
-    final data = utf8.encode(jsonEncode(cmd.toJson()));
+    final payload = Map<String, dynamic>.from(cmd.toJson())
+      ..['session'] = _sessionId
+      ..['seq'] = _nextSequence++;
+    final data = utf8.encode(jsonEncode(payload));
     try {
       final sentBytes = socket.send(data, espIp, espPort);
       debugPrint('[UDP] Sende ${cmd.id} an ${espIp.address}:$espPort (Bytes: $sentBytes, Payload: ${utf8.decode(data)})');
@@ -48,6 +53,15 @@ class UdpHexapodClient {
     } catch (e) {
       debugPrint('[UDP] Unerwarteter Fehler beim Senden von ${cmd.id}: $e');
       return false;
+    }
+  }
+
+  Future<void> sendStopBurst({int count = 3, Duration gap = const Duration(milliseconds: 30)}) async {
+    for (var i = 0; i < count; i++) {
+      await sendCommand(StopCommand());
+      if (i < count - 1) {
+        await Future<void>.delayed(gap);
+      }
     }
   }
 
