@@ -18,6 +18,59 @@ static vec3 current_point_bezier [NUM_LEGS];
 static vec3 angles_line [NUM_LEGS];
 static vec3 angles_bezier [NUM_LEGS];
 
+namespace {
+    constexpr float BOB_STANCE_MM = 35.0f;
+    constexpr float BOB_AMPLITUDE_MM = 10.0f;
+    constexpr unsigned long BOB_PERIOD_MS = 2400;
+    constexpr unsigned long BOB_SETTLE_MS = 1000;
+    constexpr unsigned long BOB_FRAME_MS = 20;
+
+    unsigned long bobStartedAtMs = 0;
+    unsigned long bobLastFrameMs = 0;
+    vec3 bobStartAngles[NUM_LEGS];
+}
+
+void startBobUpDown() {
+    bobStartedAtMs = millis();
+    bobLastFrameMs = bobStartedAtMs - BOB_FRAME_MS;
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        bobStartAngles[leg] = {
+            static_cast<float>(getLastServoAngle(leg, 0)),
+            static_cast<float>(getLastServoAngle(leg, 1)),
+            static_cast<float>(getLastServoAngle(leg, 2))
+        };
+    }
+}
+
+void bobUpDown() {
+    const unsigned long now = millis();
+    if (now - bobLastFrameMs < BOB_FRAME_MS) {
+        delay(1);
+        return;
+    }
+    bobLastFrameMs = now;
+
+    const unsigned long elapsed = now - bobStartedAtMs;
+    vec3 foot = {BOB_STANCE_MM, 0.0f, BOB_STANCE_MM};
+    if (elapsed >= BOB_SETTLE_MS) {
+        const float phase = 2.0f * PI *
+            ((elapsed - BOB_SETTLE_MS) % BOB_PERIOD_MS) / BOB_PERIOD_MS;
+        // Keep each foot's horizontal position fixed; body height varies from 80 to 100 mm.
+        foot.y = BOB_AMPLITUDE_MM * (cosf(phase) - 1.0f);
+    }
+    const vec3 target = pointToServoAngles(foot);
+
+    const float progress = elapsed < BOB_SETTLE_MS
+        ? static_cast<float>(elapsed) / BOB_SETTLE_MS : 1.0f;
+    const float blend = progress * progress * (3.0f - 2.0f * progress);
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        // Ease into a common stance before starting the synchronized movement.
+        moveServo(leg, 0, lerp(bobStartAngles[leg].x, target.x, blend));
+        moveServo(leg, 1, lerp(bobStartAngles[leg].y, target.y, blend));
+        moveServo(leg, 2, lerp(bobStartAngles[leg].z, target.z, blend));
+    }
+}
+
 void walk(float theta) {
     
     calcPoints(startingPoints, endPoints, theta);
@@ -81,31 +134,20 @@ void calcCurrentPoint(vec3 &startingPoint, vec3 &endPoint, vec3 &current_point_l
 }
 
 void calcCurrentAngles(vec3 &current_point_line, vec3 &current_point_bezier, vec3 &angles_line, vec3 &angles_bezier, float t) {
-    // Berechnung der Winkel für den zuvor berechneten Punkt
-    angles_line = pointToAngles(current_point_line);
-    angles_bezier = pointToAngles(current_point_bezier);
+    angles_line = pointToServoAngles(current_point_line);
+    angles_bezier = pointToServoAngles(current_point_bezier);
+}
 
-    // Winkel auf servo limits anpassen
+vec3 pointToServoAngles(vec3 point) {
+    vec3 angles = pointToAngles(point);
 
-    /*
-        ToDo: Magic numbers entfernen
-    */
-    
-    // 27.7 => Offset am 2. Servo
-    angles_line.y = 180.0f - angles_line.y - 27.7;
-    angles_line.z = 180.0f - angles_line.z + 27.7;
-
-    angles_bezier.y = 180.0f - angles_bezier.y - 27.7;
-    angles_bezier.z = 180.0f - angles_bezier.z + 27.7;
-
-    // 90 bzw. 180 => Range of motion pro Servo
-    angles_line.x = COXA_MIN + angles_line.x * (COXA_MAX - COXA_MIN) / 90.0f;
-    angles_line.y = FEMUR_MIN + angles_line.y * (FEMUR_MAX - FEMUR_MIN) / 180.0f;
-    angles_line.z = TIBIA_MIN + angles_line.z * (TIBIA_MAX - TIBIA_MIN) / 180.0f;
-
-    angles_bezier.x = COXA_MIN + angles_bezier.x * (COXA_MAX - COXA_MIN) / 90.0f;
-    angles_bezier.y = FEMUR_MIN + angles_bezier.y * (FEMUR_MAX - FEMUR_MIN) / 180.0f;
-    angles_bezier.z = TIBIA_MIN + angles_bezier.z * (TIBIA_MAX - TIBIA_MIN) / 180.0f;
+    // Apply the same mechanical offsets and servo ranges to every movement.
+    angles.y = 180.0f - angles.y - 27.7;
+    angles.z = 180.0f - angles.z + 27.7;
+    angles.x = COXA_MIN + angles.x * (COXA_MAX - COXA_MIN) / 90.0f;
+    angles.y = FEMUR_MIN + angles.y * (FEMUR_MAX - FEMUR_MIN) / 180.0f;
+    angles.z = TIBIA_MIN + angles.z * (TIBIA_MAX - TIBIA_MIN) / 180.0f;
+    return angles;
 }
 
 // Berechnung der Start- und Endpunkte für die Bewegung jedes Beins

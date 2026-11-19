@@ -38,6 +38,7 @@ extern JointState tibia[NUM_LEGS];
 void initJointStates();
 int angleToPulse(int angle);
 void moveServo(int leg, int servo, int angle);
+int getLastServoAngle(int leg, int servo);
 void setupPWM(Adafruit_PWMServoDriver pwm[]);
 void stopAllServos();
 void recoverPwmDrivers();

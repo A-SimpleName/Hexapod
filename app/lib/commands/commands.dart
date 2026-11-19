@@ -15,6 +15,8 @@ abstract class Command {
         return WaveLegs.fromJson(json);
       case 'circle_jerk':
         return CircleJerk.fromJson(json);
+      case 'bob_up_down':
+        return BobUpDown();
       case 'move':
         return Move.fromJson(json);
       case 'stop':
@@ -47,7 +49,10 @@ class WaveLegs extends Command {
   factory WaveLegs.fromJson(Map<String, dynamic> json) {
     final offsetsRaw = json['legOffsets'];
     final offsets = offsetsRaw is List
-        ? offsetsRaw.map((value) => Command.readDouble(value)).whereType<double>().toList()
+        ? offsetsRaw
+              .map((value) => Command.readDouble(value))
+              .whereType<double>()
+              .toList()
         : null;
 
     return WaveLegs(
@@ -86,9 +91,11 @@ class CircleJerk extends Command {
   };
 
   @override
-  Map<String, dynamic> get parameters => {
-    if (speed != null) 'speed': speed,
-  };
+  Map<String, dynamic> get parameters => {if (speed != null) 'speed': speed};
+}
+
+class BobUpDown extends Command {
+  BobUpDown() : super(id: 'bob_up_down');
 }
 
 class StopCommand extends Command {
@@ -111,7 +118,5 @@ class Move extends Command {
   };
 
   @override
-  Map<String, dynamic> get parameters => {
-    if (theta != null) 'theta': theta,
-  };
+  Map<String, dynamic> get parameters => {if (theta != null) 'theta': theta};
 }

@@ -32,10 +32,15 @@ class HomePage extends StatelessWidget {
             icon: const Icon(Icons.settings),
             tooltip: 'Settings',
             onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => SettingsPage(title: 'Settings')));
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SettingsPage(title: 'Settings'),
+                ),
+              );
             },
           ),
-        ]  
+        ],
       ),
       body: SafeArea(
         child: Padding(
@@ -45,10 +50,30 @@ class HomePage extends StatelessWidget {
               SizedBox(
                 width: 180,
                 height: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () async => _sendAndNotify(context, StopCommand()),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                  child: const Text('Stop'),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async =>
+                            _sendAndNotify(context, StopCommand()),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                        ),
+                        child: const Text('Stop'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 56,
+                      child: ElevatedButton.icon(
+                        onPressed: () async =>
+                            _sendAndNotify(context, BobUpDown()),
+                        icon: const Icon(Icons.height),
+                        label: const Text('Bob up/down'),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const Spacer(),
@@ -58,7 +83,8 @@ class HomePage extends StatelessWidget {
                 child: Joystick(
                   mode: JoystickMode.all,
                   listener: (StickDragDetails details) {
-                    final theta = 360.0 - atan2(details.x, details.y) * 180 / pi;
+                    final theta =
+                        360.0 - atan2(details.x, details.y) * 180 / pi;
                     udpClient.sendCommand(Move(theta: theta));
                   },
                   period: const Duration(milliseconds: 50),

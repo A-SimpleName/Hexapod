@@ -5,6 +5,8 @@ JointState coxa[NUM_LEGS];
 JointState femur[NUM_LEGS];
 JointState tibia[NUM_LEGS];
 
+static int lastServoAngles[NUM_LEGS][SERVOS_PER_LEG];
+
 const ServoInfo servoMap[NUM_LEGS][SERVOS_PER_LEG] = {
     {{0, 13}, {0, 14}, {0, 15}},
     {{0, 5},  {0, 6},  {0, 7}},
@@ -24,6 +26,9 @@ void initJointStates() {
         coxa[i] = {COXA_MIN, 1};
         femur[i] = {FEMUR_MIN, 1};
         tibia[i] = {TIBIA_MIN, 1};
+        lastServoAngles[i][0] = COXA_MIN;
+        lastServoAngles[i][1] = FEMUR_MIN;
+        lastServoAngles[i][2] = TIBIA_MIN;
     }
 }
 
@@ -51,7 +56,12 @@ void moveServo(int leg, int servo, int angle) {
         angle = constrain(angle, COXA_MIN, COXA_MAX);
     }
     
+    lastServoAngles[leg][servo] = angle;
     pwm[servoInfo.board].setPWM(servoInfo.channel, 0, angleToPulse(angle));
+}
+
+int getLastServoAngle(int leg, int servo) {
+    return lastServoAngles[leg][servo];
 }
 
 void setupPWM(Adafruit_PWMServoDriver pwm[]) {

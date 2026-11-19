@@ -13,6 +13,7 @@ enum class ActiveCommand {
     None,
     WaveLegs,
     CircleJerk,
+    BobUpDown,
     Move
 };
 
@@ -244,6 +245,12 @@ void pollUdpCommands() {
     } else if (commandId == "circle_jerk") {
         currentCommand = ActiveCommand::CircleJerk;
         Serial.println("UDP command: circle_jerk");
+    } else if (commandId == "bob_up_down") {
+        if (currentCommand != ActiveCommand::BobUpDown) {
+            startBobUpDown();
+        }
+        currentCommand = ActiveCommand::BobUpDown;
+        Serial.println("UDP command: bob_up_down");
     } else if (commandId == "stop") {
         currentCommand = ActiveCommand::None;
         Serial.println("UDP command: stop");
@@ -274,6 +281,9 @@ void runActiveCommand() {
             break;
         case ActiveCommand::CircleJerk:
             circleJerk();
+            break;
+        case ActiveCommand::BobUpDown:
+            bobUpDown();
             break;
         case ActiveCommand::Move:
             walk(currentMoveThetaDeg);
