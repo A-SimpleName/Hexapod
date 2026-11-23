@@ -1,7 +1,11 @@
 #include "hexapod_server.h"
 #include "servocontrols.h"
 #include "algorithm.h"
+#include "movement.h"
 #include <ctype.h>
+#include <esp_wifi.h>
+#include <math.h>
+#include <string.h>
 
 
 WiFiUDP udp;
@@ -33,26 +37,46 @@ static void onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
     }
 }
 
-static void startWifiAp() {
+static bool startWifiAp() {
     if (!wifiEventHandlerRegistered) {
         WiFi.onEvent(onWiFiEvent);
         wifiEventHandlerRegistered = true;
     }
 
-    WiFi.mode(WIFI_AP);
+    // Set storage before initializing Wi-Fi so the AP uses this build's config.
+    WiFi.persistent(false);
+    if (!WiFi.mode(WIFI_AP)) {
+        Serial.println("[WiFi] FEHLER: AP-Modus konnte nicht aktiviert werden");
+        return false;
+    }
     WiFi.setTxPower(WIFI_POWER_19_5dBm);
     WiFi.setSleep(false);
-    WiFi.persistent(false);
 
     const IPAddress apIp(192, 168, 4, 1);
     const IPAddress gateway(192, 168, 4, 1);
     const IPAddress subnet(255, 255, 255, 0);
-    WiFi.softAPConfig(apIp, gateway, subnet);
-
-    const bool apStarted = WiFi.softAP(apSsid, apPassword);
-    if (!apStarted) {
-        Serial.println("[WiFi] FEHLER: SoftAP konnte nicht gestartet werden");
+    if (!WiFi.softAPConfig(apIp, gateway, subnet)) {
+        Serial.println("[WiFi] FEHLER: AP-IP konnte nicht konfiguriert werden");
+        return false;
     }
+
+    // Arduino ESP32 2.x's softAP helper leaves some AP config fields unset.
+    wifi_config_t config{};
+    strlcpy(reinterpret_cast<char*>(config.ap.ssid), apSsid, sizeof(config.ap.ssid));
+    strlcpy(reinterpret_cast<char*>(config.ap.password), apPassword, sizeof(config.ap.password));
+    config.ap.ssid_len = strlen(apSsid);
+    config.ap.channel = 1;
+    config.ap.authmode = WIFI_AUTH_WPA2_PSK;
+    config.ap.pairwise_cipher = WIFI_CIPHER_TYPE_CCMP;
+    config.ap.max_connection = 4;
+    config.ap.beacon_interval = 100;
+
+    const esp_err_t result = esp_wifi_set_config(WIFI_IF_AP, &config);
+    if (result != ESP_OK) {
+        Serial.printf("[WiFi] FEHLER: AP-Konfiguration: %s\n", esp_err_to_name(result));
+        return false;
+    }
+    return true;
 }
 
 // Parses {"id":"..."} with a lightweight string approach to avoid extra deps.
@@ -192,7 +216,9 @@ void setupWebServer() {
 }
 
 void connectWiFi() {
-    startWifiAp();
+    if (!startWifiAp()) {
+        return;
+    }
 
     Serial.println("[WiFi] SoftAP gestartet");
     Serial.print("[WiFi] SSID: ");
@@ -260,12 +286,12 @@ void pollUdpCommands() {
         Serial.println("UDP command: recover_pwm");
     } else if (commandId == "move") {
         float thetaDeg = 0.0f;
-        if (extractFloatField(payload, "theta", thetaDeg)) {
-            currentMoveThetaDeg = thetaDeg;
+        if (extractFloatField(payload, "theta", thetaDeg) && isfinite(thetaDeg)) {
+            currentMoveThetaDeg = fmodf(thetaDeg, 360.0f);
+        }
+        if (currentCommand != ActiveCommand::Move) {
+            startWalking();
             Serial.print("UDP command: move, theta=");
-            Serial.println(currentMoveThetaDeg);
-        } else {
-            Serial.print("UDP command: move without valid theta, using last theta=");
             Serial.println(currentMoveThetaDeg);
         }
         currentCommand = ActiveCommand::Move;

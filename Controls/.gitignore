@@ -1,4 +1,4 @@
 .pio
-platformio.ini
+platformio.local.ini
 .vscode
 lib

@@ -6,7 +6,6 @@
 #include <Adafruit_SPIDevice.h>
 #include <Adafruit_PWMServoDriver.h>
 #include "calibrations.h"
-#include "movement.h"
 
 #ifndef SERVOCONTROLS_H
 #define SERVOCONTROLS_H
@@ -38,6 +37,7 @@ extern JointState tibia[NUM_LEGS];
 void initJointStates();
 int angleToPulse(int angle);
 void moveServo(int leg, int servo, int angle);
+// Returns -1 if there is no active target for the joint.
 int getLastServoAngle(int leg, int servo);
 void setupPWM(Adafruit_PWMServoDriver pwm[]);
 void stopAllServos();

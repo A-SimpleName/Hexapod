@@ -6,6 +6,7 @@ JointState femur[NUM_LEGS];
 JointState tibia[NUM_LEGS];
 
 static int lastServoAngles[NUM_LEGS][SERVOS_PER_LEG];
+constexpr int NO_SERVO_TARGET = -1;
 
 const ServoInfo servoMap[NUM_LEGS][SERVOS_PER_LEG] = {
     {{0, 13}, {0, 14}, {0, 15}},
@@ -26,9 +27,9 @@ void initJointStates() {
         coxa[i] = {COXA_MIN, 1};
         femur[i] = {FEMUR_MIN, 1};
         tibia[i] = {TIBIA_MIN, 1};
-        lastServoAngles[i][0] = COXA_MIN;
-        lastServoAngles[i][1] = FEMUR_MIN;
-        lastServoAngles[i][2] = TIBIA_MIN;
+        for (int joint = 0; joint < SERVOS_PER_LEG; ++joint) {
+            lastServoAngles[i][joint] = NO_SERVO_TARGET;
+        }
     }
 }
 
@@ -80,6 +81,7 @@ void stopAllServos() {
         for (int joint = 0; joint < SERVOS_PER_LEG; ++joint) {
             const ServoInfo info = servoMap[leg][joint];
             pwm[info.board].setPWM(info.channel, 0, 0);
+            lastServoAngles[leg][joint] = NO_SERVO_TARGET;
         }
     }
 }
