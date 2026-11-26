@@ -16,14 +16,17 @@ gait's default for missing or out-of-range heights.
 Choose **Settings → Walking gait → Bipod**, save, then use the joystick.
 Tripod is the default whenever the app opens. Bipod uses the three opposite
 leg pairs from the [Bipod-B footfall pattern](https://pmc.ncbi.nlm.nih.gov/articles/PMC5321742/#f4)
-and the robot's existing inverse kinematics. Each pair takes one turn supporting
-the body while the other two pairs swing.
+and the robot's existing inverse kinematics. The outgoing pair stays down for
+the first 20% of the next pair's stance interval. Bipod also ramps up its travel
+from centered footholds on the first step.
 
 The UDP command is `{"id":"move_bipod","theta":180,"step_ms":450}`. Keep sending
 it while walking. Stop or 250 ms without a fresh command lowers the swinging
-feet in place before holding the pose. Verify leg pairing with the robot
-supported before trying it on level ground. Balance and floor speed depend on
-the physical robot.
+feet in place, then brings each pair back to the standing stance in turn.
+If the gait is still settling into its starting pose, it finishes settling
+and holds that pose. A different movement waits for Bipod to reach the standing
+stance. Verify leg pairing with the robot supported before trying it on level
+ground. Balance and floor speed depend on the physical robot.
 
 ## Bob up/down
 
@@ -44,7 +47,7 @@ The optional `period_ms` field accepts 1200–4800 milliseconds. Omitting it
 uses the default for a new bob or keeps the current speed for an active one.
 Changing speed during a bob preserves the phase of the cycle. The pattern
 repeats until `{"id":"stop"}` or another movement command arrives. Stop holds
-the current pose, as it does for the other patterns.
+the current Bob pose.
 
 Both the controller app and ESP32 firmware need the update. Physical travel
 depends on the robot's calibration and has to be checked on the hardware.

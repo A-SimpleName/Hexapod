@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:app/commands/commands.dart';
 import 'package:app/pages/home_page.dart';
 import 'package:app/pages/settings.dart';
+import 'package:app/services/movement_limits.dart';
 import 'package:app/services/send_to_esp.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -28,7 +29,12 @@ Future<void> main() async {
     debugPrint('[UDP] FEHLER beim Initialisieren des UDP-Clients: $e');
   }
 
-  runApp(MyApp(initialMovement: await loadMovementSettings()));
+  runApp(
+    MyApp(
+      initialMovement: await loadMovementSettings(),
+      initialLimits: await MovementLimits.load(),
+    ),
+  );
 }
 
 Future<MovementSettings> loadMovementSettings() async {
@@ -89,8 +95,13 @@ Future<int> _loadSetting(String key, int defaultValue, int min, int max) async {
 
 class MyApp extends StatelessWidget {
   final MovementSettings? initialMovement;
+  final MovementLimits initialLimits;
 
-  const MyApp({super.key, this.initialMovement});
+  const MyApp({
+    super.key,
+    this.initialMovement,
+    this.initialLimits = const MovementLimits.defaults(),
+  });
 
   // This widget is the root of your application.
   @override
@@ -119,6 +130,7 @@ class MyApp extends StatelessWidget {
       routes: {
         'HomePage': (context) => HomePage(
           title: 'Hexapod Controls',
+          initialLimits: initialLimits,
           initialMovement:
               initialMovement ??
               (

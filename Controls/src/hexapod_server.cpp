@@ -20,7 +20,7 @@ enum class ActiveCommand {
     BobUpDown,
     Move,
     Bipod,
-    BipodLanding
+    BipodStopping
 };
 
 static ActiveCommand currentCommand = ActiveCommand::None;
@@ -28,6 +28,8 @@ static long currentBobPeriodMs = BOB_DEFAULT_PERIOD_MS;
 static float currentMoveThetaDeg = 0.0f;
 static unsigned long lastBipodCommandMs = 0;
 constexpr unsigned long BIPOD_COMMAND_TIMEOUT_MS = 250;
+static String pendingMovement;
+static unsigned long pendingMovementReceivedAtMs = 0;
 static long lastSessionId = -1;
 static long lastProcessedSeq = -1;
 static bool wifiEventHandlerRegistered = false;
@@ -234,50 +236,18 @@ void connectWiFi() {
 
 static void stopActiveCommand() {
     if (currentCommand == ActiveCommand::Bipod) {
-        currentCommand = startBipodLanding() ? ActiveCommand::BipodLanding : ActiveCommand::None;
-    } else if (currentCommand != ActiveCommand::BipodLanding) {
+        startBipodStop();
+        currentCommand = ActiveCommand::BipodStopping;
+    } else if (currentCommand != ActiveCommand::BipodStopping) {
         currentCommand = ActiveCommand::None;
     }
 }
 
-void pollUdpCommands() {
-    int packetSize = udp.parsePacket();
-    if (packetSize <= 0) {
-        return;
-    }
+static bool isWalkCommand(const String& commandId) {
+    return commandId == "move" || commandId == "move_bipod";
+}
 
-    char buffer[256];
-    int len = udp.read(buffer, sizeof(buffer) - 1);
-    if (len <= 0) {
-        return;
-    }
-    buffer[len] = '\0';
-
-    String payload = String(buffer);
-    String commandId = extractIdField(payload);
-
-    long session = -1;
-    bool hasSession = extractLongField(payload, "session", session);
-    if (hasSession && session != lastSessionId) {
-        lastSessionId = session;
-        lastProcessedSeq = -1;
-        Serial.print("UDP session switched: ");
-        Serial.println(lastSessionId);
-    }
-
-    long seq = -1;
-    bool hasSeq = extractLongField(payload, "seq", seq);
-    if (hasSeq) {
-        if (seq <= lastProcessedSeq) {
-            Serial.print("UDP stale packet ignored. seq=");
-            Serial.print(seq);
-            Serial.print(" last=");
-            Serial.println(lastProcessedSeq);
-            return;
-        }
-        lastProcessedSeq = seq;
-    }
-
+static void applyCommand(const String& payload, const String& commandId) {
     if (commandId == "wave_legs") {
         currentCommand = ActiveCommand::WaveLegs;
         Serial.println("UDP command: wave_legs");
@@ -297,18 +267,17 @@ void pollUdpCommands() {
         currentCommand = ActiveCommand::BobUpDown;
         Serial.printf("UDP command: bob_up_down, period=%ld ms\n", currentBobPeriodMs);
     } else if (commandId == "stop") {
+        pendingMovement = "";
         stopActiveCommand();
         Serial.println("UDP command: stop");
     } else if (commandId == "recover_pwm") {
+        pendingMovement = "";
         currentCommand = ActiveCommand::None;
         recoverPwmDrivers();
         Serial.println("UDP command: recover_pwm");
-    } else if (commandId == "move" || commandId == "move_bipod") {
+    } else if (isWalkCommand(commandId)) {
         const bool bipod = commandId == "move_bipod";
         const ActiveCommand requested = bipod ? ActiveCommand::Bipod : ActiveCommand::Move;
-        if (currentCommand == ActiveCommand::BipodLanding) {
-            return;
-        }
         float thetaDeg = 0.0f;
         if (extractFloatField(payload, "theta", thetaDeg) && isfinite(thetaDeg)) {
             currentMoveThetaDeg = fmodf(thetaDeg, 360.0f);
@@ -336,6 +305,60 @@ void pollUdpCommands() {
     }
 }
 
+void pollUdpCommands() {
+    int packetSize = udp.parsePacket();
+    if (packetSize <= 0) {
+        return;
+    }
+
+    char buffer[256];
+    int len = udp.read(buffer, sizeof(buffer) - 1);
+    if (len <= 0) {
+        return;
+    }
+    buffer[len] = '\0';
+
+    const String payload = String(buffer);
+    const String commandId = extractIdField(payload);
+
+    long session = -1;
+    bool hasSession = extractLongField(payload, "session", session);
+    if (hasSession && session != lastSessionId) {
+        lastSessionId = session;
+        lastProcessedSeq = -1;
+        pendingMovement = "";
+        Serial.print("UDP session switched: ");
+        Serial.println(lastSessionId);
+    }
+
+    long seq = -1;
+    bool hasSeq = extractLongField(payload, "seq", seq);
+    if (hasSeq) {
+        if (seq <= lastProcessedSeq) {
+            Serial.print("UDP stale packet ignored. seq=");
+            Serial.print(seq);
+            Serial.print(" last=");
+            Serial.println(lastProcessedSeq);
+            return;
+        }
+        lastProcessedSeq = seq;
+    }
+
+    const bool commandsMovement = isWalkCommand(commandId) || commandId == "bob_up_down" ||
+        commandId == "wave_legs" || commandId == "circle_jerk";
+    if (commandsMovement) {
+        if (currentCommand == ActiveCommand::Bipod && commandId != "move_bipod") {
+            stopActiveCommand();
+        }
+        if (currentCommand == ActiveCommand::BipodStopping) {
+            pendingMovement = payload;
+            pendingMovementReceivedAtMs = millis();
+            return;
+        }
+    }
+    applyCommand(payload, commandId);
+}
+
 void runActiveCommand() {
     switch (currentCommand) {
         case ActiveCommand::WaveLegs:
@@ -357,9 +380,18 @@ void runActiveCommand() {
                 walk(currentMoveThetaDeg);
             }
             break;
-        case ActiveCommand::BipodLanding:
-            if (landBipod()) {
+        case ActiveCommand::BipodStopping:
+            if (walk(currentMoveThetaDeg)) {
                 currentCommand = ActiveCommand::None;
+                if (pendingMovement.length() > 0) {
+                    const String commandId = extractIdField(pendingMovement);
+                    // A released or disconnected joystick must not restart walking.
+                    if (!isWalkCommand(commandId) ||
+                        millis() - pendingMovementReceivedAtMs < BIPOD_COMMAND_TIMEOUT_MS) {
+                        applyCommand(pendingMovement, commandId);
+                    }
+                    pendingMovement = "";
+                }
             }
             break;
         case ActiveCommand::None:

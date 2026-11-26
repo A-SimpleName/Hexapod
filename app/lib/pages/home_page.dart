@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:app/pages/settings.dart';
+import 'package:app/services/movement_limits.dart';
 import 'package:app/main.dart';
 import 'package:app/commands/commands.dart';
 import 'package:flutter_joystick/flutter_joystick.dart';
@@ -12,11 +13,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 class HomePage extends StatefulWidget {
   final String title;
   final MovementSettings initialMovement;
+  final MovementLimits initialLimits;
 
   const HomePage({
     super.key,
     required this.title,
     required this.initialMovement,
+    required this.initialLimits,
   });
 
   @override
@@ -32,6 +35,7 @@ class _HomePageState extends State<HomePage> {
   bool _joystickStopped = false;
 
   late MovementSettings _movement = widget.initialMovement;
+  late MovementLimits _limits = widget.initialLimits;
 
   @override
   void initState() {
@@ -96,11 +100,39 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  WalkGait get _activeGait =>
+      _limits.bipodEnabled ? _movement.gait : WalkGait.tripod;
+
+  Future<void> _saveLimits(MovementLimits limits) async {
+    await limits.save();
+    if (!mounted) return;
+    final leavingBipod = _activeGait == WalkGait.bipod && !limits.bipodEnabled;
+    setState(() {
+      _limits = limits;
+      if (leavingBipod) {
+        _joystickStopped = true;
+        _movement = (
+          bobPeriodMs: _movement.bobPeriodMs,
+          tripodStepMs: _movement.tripodStepMs,
+          bipodStepMs: _movement.bipodStepMs,
+          tripodLiftMm: _movement.tripodLiftMm,
+          bipodLiftMm: _movement.bipodLiftMm,
+          gait: WalkGait.tripod,
+        );
+      }
+    });
+    if (leavingBipod) await udpClient.sendStopBurst();
+  }
+
   Future<void> _openSettings() async {
     final settings = await Navigator.push<MovementSettings>(
       context,
       MaterialPageRoute(
-        builder: (_) => SettingsPage(initialSettings: _movement),
+        builder: (_) => SettingsPage(
+          initialSettings: _movement,
+          initialLimits: _limits,
+          onSaveLimits: _saveLimits,
+        ),
       ),
     );
     if (!mounted || settings == null || settings == _movement) {
@@ -203,7 +235,12 @@ class _HomePageState extends State<HomePage> {
                       child: ElevatedButton.icon(
                         onPressed: () async => _sendAndNotify(
                           context,
-                          BobUpDown(periodMs: _movement.bobPeriodMs),
+                          BobUpDown(
+                            periodMs: _limits.limit(
+                              MotionControl.bobSpeed,
+                              _movement.bobPeriodMs,
+                            ),
+                          ),
                         ),
                         icon: const Icon(Icons.height),
                         label: const Text('Bob up/down'),
@@ -221,7 +258,7 @@ class _HomePageState extends State<HomePage> {
                   onStickDragStart: () => _joystickStopped = false,
                   listener: (StickDragDetails details) {
                     if (_joystickStopped) return;
-                    final gait = _movement.gait;
+                    final gait = _activeGait;
                     if (gait == WalkGait.bipod &&
                         details.x == 0 &&
                         details.y == 0) {
@@ -233,11 +270,23 @@ class _HomePageState extends State<HomePage> {
                       Move(
                         theta: theta,
                         stepMs: gait == WalkGait.bipod
-                            ? _movement.bipodStepMs
-                            : _movement.tripodStepMs,
+                            ? _limits.limit(
+                                MotionControl.bipodSpeed,
+                                _movement.bipodStepMs,
+                              )
+                            : _limits.limit(
+                                MotionControl.tripodSpeed,
+                                _movement.tripodStepMs,
+                              ),
                         liftMm: gait == WalkGait.bipod
-                            ? _movement.bipodLiftMm
-                            : _movement.tripodLiftMm,
+                            ? _limits.limit(
+                                MotionControl.bipodHeight,
+                                _movement.bipodLiftMm,
+                              )
+                            : _limits.limit(
+                                MotionControl.tripodHeight,
+                                _movement.tripodLiftMm,
+                              ),
                         gait: gait,
                       ),
                     );

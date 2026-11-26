@@ -96,8 +96,8 @@ class CircleJerk extends Command {
 }
 
 class BobUpDown extends Command {
-  static const defaultPeriodMs = 2400;
-  static const minPeriodMs = 1600;
+  static const defaultPeriodMs = 2000;
+  static const minPeriodMs = 400;
   static const maxPeriodMs = 4800;
 
   final int? periodMs;
@@ -146,8 +146,8 @@ enum WalkGait {
 }
 
 class Move extends Command {
-  static const defaultStepMs = 450;
-  static const minStepMs = 300;
+  static const defaultStepMs = 300;
+  static const minStepMs = 100;
   static const maxStepMs = 800;
 
   final double? theta;

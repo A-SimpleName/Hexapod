@@ -12,6 +12,7 @@ import 'package:shared_preferences_platform_interface/shared_preferences_async_p
 
 import 'package:app/commands/commands.dart';
 import 'package:app/main.dart';
+import 'package:app/services/movement_limits.dart';
 import 'package:app/services/send_to_esp.dart';
 
 void main() {
@@ -85,7 +86,7 @@ void main() {
     variant: const TargetPlatformVariant({TargetPlatform.android}),
   );
 
-  testWidgets('Each gait loads, saves and sends its own speed and lift', (
+  testWidgets('Movement settings and admin limits apply to joystick commands', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(800, 400);
@@ -158,6 +159,14 @@ void main() {
     await tester.pumpAndSettle();
     String bobTime(int ms) => 'Cycle time: ${(ms / 1000).toStringAsFixed(1)} s';
     expect(find.text(bobTime(BobUpDown.defaultPeriodMs)), findsOneWidget);
+    expect(find.text('Bipod'), findsNothing);
+    expect(find.byKey(const ValueKey('bipod-speed')), findsNothing);
+    await tester.tap(find.text('Admin settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Enable Bipod'));
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect((await MovementLimits.load()).bipodEnabled, isTrue);
     await tester.tap(find.text('Bipod'));
     await tester.pumpAndSettle();
     final bobControl = find.byKey(const ValueKey('bob-speed'));
@@ -263,18 +272,59 @@ void main() {
     );
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Tripod'));
+    await tester.tap(find.text('Admin settings'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Save'));
+    await tester.tap(find.text('Enable Bipod'));
+
+    Future<void> setBound(String key, int value) async {
+      final field = find.byKey(ValueKey(key));
+      await tester.ensureVisible(field);
+      await tester.enterText(field, '$value');
+    }
+
+    await setBound('tripodSpeed-min', 500);
+    await setBound('tripodSpeed-max', 801);
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Use ${Move.minStepMs}–${Move.maxStepMs}'),
+      findsOneWidget,
+    );
+    await setBound('tripodSpeed-max', 499);
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Below minimum'), findsOneWidget);
+    expect((await MovementLimits.load()).bipodEnabled, isTrue);
+    await setBound('tripodSpeed-max', 620);
+    await setBound('tripodHeight-max', 18);
+    await setBound('bobSpeed-min', 1225);
+    await setBound('bobSpeed-max', 1225);
     await tester.tap(find.text('Save'));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    await verifyWalk(
-      'move',
-      WalkGait.tripod,
-      Move.maxStepMs,
-      WalkGait.tripod.maxLiftMm,
+    for (var i = 0; i < 3; i++) {
+      if (i > 0) await tester.pump(const Duration(milliseconds: 30));
+      expect((await tester.runAsync(receiveCommand))!['id'], 'stop');
+    }
+    await tester.pumpAndSettle();
+    expect(find.text('Bipod'), findsNothing);
+    expect(find.byKey(const ValueKey('bipod-height')), findsNothing);
+    expect(find.text('Step time: 620 ms'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const ValueKey('bob-speed')));
+    expect(find.text('Cycle time: 1.225 s'), findsOneWidget);
+    expect(
+      tester.widget<Slider>(find.byKey(const ValueKey('bob-speed'))).onChanged,
+      isNull,
     );
+    final limits = await MovementLimits.load();
+    expect(limits.bipodEnabled, isFalse);
+    expect(limits.rangeFor(MotionControl.tripodSpeed), (min: 500, max: 620));
+    expect((await loadMovementSettings()).tripodStepMs, Move.maxStepMs);
+    await tester.tap(find.byTooltip('Close Settings'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('Bob up/down'));
+    expect((await tester.runAsync(receiveCommand))!['period_ms'], 1225);
+    await verifyWalk('move', WalkGait.tripod, 620, 18);
     expect(tester.takeException(), isNull);
   });
 }

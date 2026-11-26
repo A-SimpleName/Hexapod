@@ -1,4 +1,8 @@
+import 'dart:math';
+
 import 'package:app/commands/commands.dart';
+import 'package:app/pages/admin_settings.dart';
+import 'package:app/services/movement_limits.dart';
 import 'package:flutter/material.dart';
 
 typedef MovementSettings = ({
@@ -12,8 +16,15 @@ typedef MovementSettings = ({
 
 class SettingsPage extends StatefulWidget {
   final MovementSettings initialSettings;
+  final MovementLimits initialLimits;
+  final Future<void> Function(MovementLimits) onSaveLimits;
 
-  const SettingsPage({super.key, required this.initialSettings});
+  const SettingsPage({
+    super.key,
+    required this.initialSettings,
+    required this.initialLimits,
+    required this.onSaveLimits,
+  });
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -29,7 +40,27 @@ class _SettingsPageState extends State<SettingsPage> {
     WalkGait.tripod: widget.initialSettings.tripodLiftMm,
     WalkGait.bipod: widget.initialSettings.bipodLiftMm,
   };
-  late WalkGait _gait = widget.initialSettings.gait;
+  late MovementLimits _limits = widget.initialLimits;
+  late WalkGait _gait = widget.initialLimits.bipodEnabled
+      ? widget.initialSettings.gait
+      : WalkGait.tripod;
+
+  Future<void> _openAdminSettings() async {
+    final limits = await Navigator.push<MovementLimits>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AdminSettingsPage(
+          initialLimits: _limits,
+          onSave: widget.onSaveLimits,
+        ),
+      ),
+    );
+    if (!mounted || limits == null) return;
+    setState(() {
+      _limits = limits;
+      if (!limits.bipodEnabled) _gait = WalkGait.tripod;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +68,10 @@ class _SettingsPageState extends State<SettingsPage> {
       appBar: AppBar(
         title: const Text('Settings'),
         actions: [
+          TextButton(
+            onPressed: _openAdminSettings,
+            child: const Text('Admin settings'),
+          ),
           IconButton(
             icon: const Icon(Icons.close),
             tooltip: 'Close Settings',
@@ -60,37 +95,39 @@ class _SettingsPageState extends State<SettingsPage> {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
-                        'Walking gait',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: SegmentedButton<WalkGait>(
-                          segments: const [
-                            ButtonSegment(
-                              value: WalkGait.tripod,
-                              label: Text('Tripod'),
-                            ),
-                            ButtonSegment(
-                              value: WalkGait.bipod,
-                              label: Text('Bipod'),
-                            ),
-                          ],
-                          selected: {_gait},
-                          onSelectionChanged: (selected) =>
-                              setState(() => _gait = selected.single),
+                      if (_limits.bipodEnabled) ...[
+                        Text(
+                          'Walking gait',
+                          style: Theme.of(context).textTheme.titleLarge,
                         ),
-                      ),
-                      if (_gait == WalkGait.bipod)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 8),
-                          child: Text(
-                            'Experimental. Two feet support the robot during each step.',
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: SegmentedButton<WalkGait>(
+                            segments: const [
+                              ButtonSegment(
+                                value: WalkGait.tripod,
+                                label: Text('Tripod'),
+                              ),
+                              ButtonSegment(
+                                value: WalkGait.bipod,
+                                label: Text('Bipod'),
+                              ),
+                            ],
+                            selected: {_gait},
+                            onSelectionChanged: (selected) =>
+                                setState(() => _gait = selected.single),
                           ),
                         ),
-                      const SizedBox(height: 20),
+                        if (_gait == WalkGait.bipod)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Text(
+                              'Experimental. Two feet support the robot during each step.',
+                            ),
+                          ),
+                        const SizedBox(height: 20),
+                      ],
                       Wrap(
                         spacing: gap,
                         runSpacing: 24,
@@ -102,17 +139,19 @@ class _SettingsPageState extends State<SettingsPage> {
                               title: 'Bob speed',
                               valueLabel: 'Cycle time',
                               value: _bobPeriodMs,
-                              min: BobUpDown.minPeriodMs,
-                              max: BobUpDown.maxPeriodMs,
+                              range: _limits.rangeFor(MotionControl.bobSpeed),
                               increment: 200,
                               format: (ms) =>
-                                  '${(ms / 1000).toStringAsFixed(1)} s',
+                                  '${(ms / 1000).toStringAsFixed(3).replaceFirst(RegExp(r'0{1,2}$'), '')} s',
                               fasterOnRight: true,
                               onChanged: (ms) =>
                                   setState(() => _bobPeriodMs = ms),
                             ),
                           ),
-                          for (final gait in WalkGait.values)
+                          for (final gait
+                              in _limits.bipodEnabled
+                                  ? WalkGait.values
+                                  : [WalkGait.tripod])
                             SizedBox(
                               width: controlWidth,
                               child: Column(
@@ -122,8 +161,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                     title: '${gait.label} speed',
                                     valueLabel: 'Step time',
                                     value: _stepTimes[gait]!,
-                                    min: Move.minStepMs,
-                                    max: Move.maxStepMs,
+                                    range: _limits.rangeFor(
+                                      gait == WalkGait.bipod
+                                          ? MotionControl.bipodSpeed
+                                          : MotionControl.tripodSpeed,
+                                    ),
                                     increment: 20,
                                     format: (ms) => '$ms ms',
                                     fasterOnRight: true,
@@ -136,8 +178,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                     title: '${gait.label} step height',
                                     valueLabel: 'Lift',
                                     value: _liftHeights[gait]!,
-                                    min: gait.minLiftMm,
-                                    max: gait.maxLiftMm,
+                                    range: _limits.rangeFor(
+                                      gait == WalkGait.bipod
+                                          ? MotionControl.bipodHeight
+                                          : MotionControl.tripodHeight,
+                                    ),
                                     increment: 2,
                                     format: (mm) => '$mm mm',
                                     onChanged: (mm) =>
@@ -181,8 +226,7 @@ class _MotionSlider extends StatelessWidget {
   final String title;
   final String valueLabel;
   final int value;
-  final int min;
-  final int max;
+  final MotionRange range;
   final int increment;
   final String Function(int) format;
   final bool fasterOnRight;
@@ -193,8 +237,7 @@ class _MotionSlider extends StatelessWidget {
     required this.title,
     required this.valueLabel,
     required this.value,
-    required this.min,
-    required this.max,
+    required this.range,
     required this.increment,
     required this.format,
     this.fasterOnRight = false,
@@ -203,9 +246,12 @@ class _MotionSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final formatted = format(value);
+    final (min: lower, max: upper) = range;
+    final extent = upper - lower;
+    final current = value.clamp(lower, upper);
+    final formatted = format(current);
     int fromSlider(double position) =>
-        fasterOnRight ? max - position.round() : min + position.round();
+        fasterOnRight ? upper - position.round() : lower + position.round();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -215,12 +261,15 @@ class _MotionSlider extends StatelessWidget {
           label: title,
           child: Slider(
             key: sliderKey,
-            value: (fasterOnRight ? max - value : value - min).toDouble(),
-            max: (max - min).toDouble(),
-            divisions: (max - min) ~/ increment,
+            value: (fasterOnRight ? upper - current : current - lower)
+                .toDouble(),
+            max: extent.toDouble(),
+            divisions: extent == 0 ? null : max(1, extent ~/ increment),
             label: formatted,
             semanticFormatterCallback: (value) => format(fromSlider(value)),
-            onChanged: (value) => onChanged(fromSlider(value)),
+            onChanged: extent == 0
+                ? null
+                : (value) => onChanged(fromSlider(value)),
           ),
         ),
         Row(

@@ -4,6 +4,7 @@
 namespace {
     constexpr float HEIGHT = 100.0f;
     constexpr float STANCE_MM = 35.0f;
+    constexpr vec3 STANDING_FOOT = {STANCE_MM, 0.0f, STANCE_MM};
     constexpr unsigned long SERVO_FRAME_MS = 20;
 
     // One step exchanges the supporting groups.
@@ -11,6 +12,12 @@ namespace {
     constexpr unsigned long WALK_SETTLE_MS = 800;
     constexpr float WALK_STEERING_TIME_MS = 180.0f;
     constexpr unsigned long BIPOD_LAND_MS = 180;
+    constexpr unsigned long BIPOD_CENTER_PAIR_MS = 240;
+    constexpr int BIPOD_PAIR_COUNT = NUM_LEGS / 2;
+    // Each new pair touches down one interval after the last, with 20% overlap.
+    constexpr float BIPOD_STANCE_STEPS = 1.2f;
+    constexpr float BIPOD_ADVANCE_MM = WALK_STRIDE_MM / BIPOD_STANCE_STEPS;
+    constexpr float BIPOD_CENTER_LIFT_MM = 6.0f;
 
     struct LiftRange {
         long minMm;
@@ -26,15 +33,18 @@ namespace {
         float z;
     };
 
+    enum class WalkStage { Settling, Striding, SettlingToStop, Lowering, Centering, Standing };
+
     unsigned long walkStageStartedAtMs = 0;
     unsigned long walkLastFrameMs = 0;
     unsigned long walkStepMs = WALK_DEFAULT_STEP_MS;
     float walkLiftMm = TRIPOD_LIFT.defaultMm;
     WalkGait walkGait = WalkGait::Tripod;
-    bool walkSettling = false;
+    WalkStage walkStage = WalkStage::Standing;
     Direction walkDirection;
     vec3 walkStartAngles[NUM_LEGS];
     vec3 bipodFootTargets[NUM_LEGS];
+    int bipodCenterPair = 0;
 
     constexpr float BOB_AMPLITUDE_MM = 10.0f;
     constexpr unsigned long BOB_SETTLE_MS = 1000;
@@ -57,6 +67,10 @@ namespace {
         return progress * progress * (3.0f - 2.0f * progress);
     }
 
+    float stageProgress(unsigned long elapsed, unsigned long duration) {
+        return min(1.0f, static_cast<float>(elapsed) / duration);
+    }
+
     float lerp(float start, float end, float progress) {
         return start * (1.0f - progress) + end * progress;
     }
@@ -67,7 +81,7 @@ namespace {
     }
 
     void captureStartingPose(vec3 angles[NUM_LEGS]) {
-        const vec3 neutral = pointToServoAngles({STANCE_MM, 0.0f, STANCE_MM});
+        const vec3 neutral = pointToServoAngles(STANDING_FOOT);
         for (int leg = 0; leg < NUM_LEGS; ++leg) {
             angles[leg] = {
                 lastAngleOr(leg, COXA, neutral.x),
@@ -103,24 +117,59 @@ namespace {
         return {STANCE_MM + offset * dx, -lift, STANCE_MM + offset * dz};
     }
 
-    void walkBipod(unsigned long elapsed, unsigned long step, float phase) {
-        const float halfStride = WALK_STRIDE_MM / 2.0f;
-        const float entry = smoothstep(min(1.0f, static_cast<float>(elapsed) / walkStepMs));
-        const int supportPair = step % 3;
-        for (int leg = 0; leg < NUM_LEGS; ++leg) {
-            // Bipod-B uses three opposite pairs around the chassis: 0/3, 1/4, 2/5.
-            const int stepsSinceStance = (supportPair + 3 - leg % 3) % 3;
-            float offset = 2.0f * phase - 1.0f;
-            float lift = 0.0f;
-            if (stepsSinceStance != 0) {
-                // Swing lasts two intervals. Match the stance velocity at takeoff and touchdown.
-                const float swingPhase = (stepsSinceStance - 1 + phase) / 2.0f;
-                offset = 1.0f + 4.0f * swingPhase - 6.0f * smoothstep(swingPhase);
-                const float arc = sinf(PI * swingPhase);
-                lift = walkLiftMm * arc * arc;
+    float bipodStartupTravel(float timeInSteps) {
+        // Integrate a linear ramp to the steady walking speed over the first interval.
+        return timeInSteps < 1.0f ? 0.5f * timeInSteps * timeInSteps : timeInSteps - 0.5f;
+    }
+
+    void walkBipod(unsigned long step, float phase) {
+        const int supportPair = step % BIPOD_PAIR_COUNT;
+        const float halfStance = BIPOD_STANCE_STEPS / 2.0f;
+        for (int pair = 0; pair < BIPOD_PAIR_COUNT; ++pair) {
+            const int stepsSinceStance = (supportPair + BIPOD_PAIR_COUNT - pair) % BIPOD_PAIR_COUNT;
+            const float pairPhase = stepsSinceStance + phase;
+            float swing = max(0.0f, pairPhase - BIPOD_STANCE_STEPS) / (BIPOD_PAIR_COUNT - BIPOD_STANCE_STEPS);
+            // Body travel moves the stance feet together. Swing blends toward the next foothold.
+            float offset = pairPhase - halfStance - BIPOD_PAIR_COUNT * smoothstep(swing);
+            const int stanceStart = supportPair - stepsSinceStance;
+            if (step < BIPOD_PAIR_COUNT && stanceStart <= 0) {
+                // The initial foothold is centered. Replant to the normal stride on the first swing.
+                const float time = step + phase;
+                const float liftOff = max(0.0f, stanceStart + BIPOD_STANCE_STEPS);
+                const float touchdown = stanceStart + BIPOD_PAIR_COUNT;
+                swing = max(0.0f, time - liftOff) / (touchdown - liftOff);
+                offset = bipodStartupTravel(time) - bipodStartupTravel(touchdown + halfStance) * smoothstep(swing);
             }
-            const vec3 foot = walkingFoot(leg, halfStride * offset * entry, lift * entry);
-            bipodFootTargets[leg] = foot;
+            const float arc = sinf(PI * swing);
+            const float lift = walkLiftMm * arc * arc;
+            // Bipod-B pairs opposite legs: 0/3, 1/4, 2/5.
+            for (int leg = pair; leg < NUM_LEGS; leg += BIPOD_PAIR_COUNT) {
+                const vec3 foot = walkingFoot(leg, BIPOD_ADVANCE_MM * offset, lift);
+                bipodFootTargets[leg] = foot;
+                moveLeg(leg, pointToServoAngles(foot));
+            }
+        }
+    }
+
+    void lowerBipodFeet(float blend) {
+        for (int leg = 0; leg < NUM_LEGS; ++leg) {
+            vec3 foot = bipodFootTargets[leg];
+            foot.y *= 1.0f - blend;
+            moveLeg(leg, pointToServoAngles(foot));
+        }
+    }
+
+    void centerBipodPair(float blend) {
+        // Reposition only this pair. The other four feet keep their grounded targets.
+        for (int leg = bipodCenterPair; leg < NUM_LEGS; leg += BIPOD_PAIR_COUNT) {
+            const vec3 from = bipodFootTargets[leg];
+            const float distance = hypotf(from.x - STANDING_FOOT.x, from.z - STANDING_FOOT.z);
+            const float lift = min(BIPOD_CENTER_LIFT_MM, distance) * 4.0f * blend * (1.0f - blend);
+            const vec3 foot = {
+                lerp(from.x, STANDING_FOOT.x, blend),
+                -lift,
+                lerp(from.z, STANDING_FOOT.z, blend)
+            };
             moveLeg(leg, pointToServoAngles(foot));
         }
     }
@@ -143,7 +192,7 @@ void bobUpDown(unsigned long periodMs) {
     bobLastFrameMs = now;
 
     const unsigned long elapsed = now - bobStartedAtMs;
-    vec3 foot = {STANCE_MM, 0.0f, STANCE_MM};
+    vec3 foot = STANDING_FOOT;
     if (elapsed >= BOB_SETTLE_MS) {
         const unsigned long sinceSettle = elapsed - BOB_SETTLE_MS;
         const unsigned long motionElapsed = min(frameElapsed, sinceSettle);
@@ -161,7 +210,7 @@ void bobUpDown(unsigned long periodMs) {
 void startWalking(unsigned long stepMs, WalkGait gait, long liftMm) {
     walkStageStartedAtMs = millis();
     walkLastFrameMs = walkStageStartedAtMs - SERVO_FRAME_MS;
-    walkSettling = true;
+    walkStage = WalkStage::Settling;
     walkStepMs = stepMs;
     walkGait = gait;
     const LiftRange range = gait == WalkGait::Bipod ? BIPOD_LIFT : TRIPOD_LIFT;
@@ -169,36 +218,71 @@ void startWalking(unsigned long stepMs, WalkGait gait, long liftMm) {
     captureStartingPose(walkStartAngles);
 }
 
-void walk(float theta) {
+void startBipodStop() {
+    if (walkStage == WalkStage::Settling) {
+        walkStage = WalkStage::SettlingToStop;
+    } else if (walkStage == WalkStage::Striding) {
+        walkStage = WalkStage::Lowering;
+        walkStageStartedAtMs = millis();
+    }
+}
+
+bool walk(float theta) {
+    if (walkStage == WalkStage::Standing) {
+        return true;
+    }
     const unsigned long now = millis();
     const unsigned long frameElapsed = now - walkLastFrameMs;
     if (frameElapsed < SERVO_FRAME_MS) {
         delay(1);
-        return;
+        return false;
     }
     walkLastFrameMs = now;
 
     const unsigned long elapsed = now - walkStageStartedAtMs;
-    const Direction requested = directionForTheta(theta);
-    if (walkSettling) {
-        const float progress = elapsed < WALK_SETTLE_MS
-            ? static_cast<float>(elapsed) / WALK_SETTLE_MS : 1.0f;
-        const vec3 neutral = pointToServoAngles({STANCE_MM, 0.0f, STANCE_MM});
-        blendToPose(walkStartAngles, neutral, smoothstep(progress));
+    if (walkStage == WalkStage::Settling || walkStage == WalkStage::SettlingToStop) {
+        const float blend = smoothstep(stageProgress(elapsed, WALK_SETTLE_MS));
+        blendToPose(walkStartAngles, pointToServoAngles(STANDING_FOOT), blend);
         if (elapsed >= WALK_SETTLE_MS) {
-            walkSettling = false;
+            if (walkStage == WalkStage::SettlingToStop) {
+                walkStage = WalkStage::Standing;
+                return true;
+            }
+            walkStage = WalkStage::Striding;
             walkStageStartedAtMs = now;
-            walkDirection = requested;
+            walkDirection = directionForTheta(theta);
             if (walkGait == WalkGait::Bipod) {
-                for (int leg = 0; leg < NUM_LEGS; ++leg) {
-                    bipodFootTargets[leg] = {STANCE_MM, 0.0f, STANCE_MM};
+                for (vec3& foot : bipodFootTargets) {
+                    foot = STANDING_FOOT;
                 }
             }
         }
-        return;
+        return false;
+    }
+
+    if (walkStage == WalkStage::Lowering) {
+        lowerBipodFeet(smoothstep(stageProgress(elapsed, BIPOD_LAND_MS)));
+        if (elapsed >= BIPOD_LAND_MS) {
+            walkStage = WalkStage::Centering;
+            walkStageStartedAtMs = now;
+            bipodCenterPair = 0;
+        }
+        return false;
+    }
+    if (walkStage == WalkStage::Centering) {
+        centerBipodPair(smoothstep(stageProgress(elapsed, BIPOD_CENTER_PAIR_MS)));
+        if (elapsed >= BIPOD_CENTER_PAIR_MS) {
+            if (++bipodCenterPair == BIPOD_PAIR_COUNT) {
+                walkStage = WalkStage::Standing;
+                return true;
+            }
+            walkStageStartedAtMs = now;
+        }
+        return false;
     }
 
     // Blend direction vectors so reversals slow through zero and angles wrap naturally.
+    const Direction requested = directionForTheta(theta);
     const float steeringBlend = 1.0f - expf(-static_cast<float>(frameElapsed) / WALK_STEERING_TIME_MS);
     walkDirection.x = lerp(walkDirection.x, requested.x, steeringBlend);
     walkDirection.z = lerp(walkDirection.z, requested.z, steeringBlend);
@@ -206,8 +290,8 @@ void walk(float theta) {
     const unsigned long step = elapsed / walkStepMs;
     const float phase = static_cast<float>(elapsed % walkStepMs) / walkStepMs;
     if (walkGait == WalkGait::Bipod) {
-        walkBipod(elapsed, step, phase);
-        return;
+        walkBipod(step, phase);
+        return false;
     }
     const float halfStride = WALK_STRIDE_MM / 2.0f;
     const bool firstStep = step == 0;
@@ -225,32 +309,7 @@ void walk(float theta) {
         const vec3 foot = walkingFoot(leg, offset, supporting ? 0.0f : walkLiftMm * lift * lift);
         moveLeg(leg, pointToServoAngles(foot));
     }
-}
-
-bool startBipodLanding() {
-    if (walkGait != WalkGait::Bipod || walkSettling) {
-        return false;
-    }
-    walkStageStartedAtMs = millis();
-    walkLastFrameMs = walkStageStartedAtMs - SERVO_FRAME_MS;
-    return true;
-}
-
-bool landBipod() {
-    const unsigned long now = millis();
-    if (now - walkLastFrameMs < SERVO_FRAME_MS) {
-        delay(1);
-        return false;
-    }
-    walkLastFrameMs = now;
-    const float progress = min(1.0f, static_cast<float>(now - walkStageStartedAtMs) / BIPOD_LAND_MS);
-    const float liftRemaining = 1.0f - smoothstep(progress);
-    for (int leg = 0; leg < NUM_LEGS; ++leg) {
-        vec3 foot = bipodFootTargets[leg];
-        foot.y *= liftRemaining;
-        moveLeg(leg, pointToServoAngles(foot));
-    }
-    return progress >= 1.0f;
+    return false;
 }
 
 vec3 pointToServoAngles(vec3 point) {
