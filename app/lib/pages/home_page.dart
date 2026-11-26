@@ -1,15 +1,144 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:app/pages/settings.dart';
 import 'package:app/main.dart';
 import 'package:app/commands/commands.dart';
 import 'package:flutter_joystick/flutter_joystick.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   final String title;
+  final MovementSettings initialMovement;
 
-  const HomePage({super.key, required this.title});
+  const HomePage({
+    super.key,
+    required this.title,
+    required this.initialMovement,
+  });
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  static const _wifiChannel = MethodChannel('hexapod/wifi');
+  final _showWifiConnect =
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+  bool _wifiConnected = false;
+  bool _wifiBusy = false;
+  bool _joystickStopped = false;
+
+  late MovementSettings _movement = widget.initialMovement;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_showWifiConnect) {
+      _wifiChannel.setMethodCallHandler((call) async {
+        if (call.method == 'disconnected' && mounted) {
+          udpClient.robotWifiSender = null;
+          setState(() => _wifiConnected = false);
+          _showWifiMessage('Robot Wi-Fi disconnected.');
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_showWifiConnect) {
+      _wifiChannel.setMethodCallHandler(null);
+      udpClient.robotWifiSender = null;
+    }
+    super.dispose();
+  }
+
+  void _showWifiMessage(String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _toggleRobotWifi() async {
+    setState(() => _wifiBusy = true);
+    try {
+      if (_wifiConnected) {
+        _joystickStopped = true;
+        await udpClient.sendStopBurst();
+        await _wifiChannel.invokeMethod<void>('disconnect');
+        if (!mounted) return;
+        udpClient.robotWifiSender = null;
+        setState(() => _wifiConnected = false);
+      } else {
+        await _wifiChannel.invokeMethod<void>('connect', {
+          'host': udpClient.espIp.address,
+          'port': udpClient.espPort,
+        });
+        if (!mounted) return;
+        udpClient.robotWifiSender = (packet) async =>
+            await _wifiChannel.invokeMethod<bool>('send', packet) ?? false;
+        setState(() => _wifiConnected = true);
+        _showWifiMessage('Connected to Hexapod-ESP32.');
+      }
+    } on PlatformException catch (error) {
+      if (mounted) {
+        _showWifiMessage(error.message ?? 'Could not connect to the robot.');
+      }
+    } on MissingPluginException {
+      if (mounted) {
+        _showWifiMessage('In-app Wi-Fi is unavailable on this device.');
+      }
+    } finally {
+      if (mounted) setState(() => _wifiBusy = false);
+    }
+  }
+
+  Future<void> _openSettings() async {
+    final settings = await Navigator.push<MovementSettings>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SettingsPage(initialSettings: _movement),
+      ),
+    );
+    if (!mounted || settings == null || settings == _movement) {
+      return;
+    }
+    final previous = _movement;
+    setState(() => _movement = settings);
+    final changed = {
+      if (settings.bobPeriodMs != previous.bobPeriodMs)
+        bobPeriodPreferenceKey: settings.bobPeriodMs,
+      if (settings.tripodStepMs != previous.tripodStepMs)
+        tripodStepPreferenceKey: settings.tripodStepMs,
+      if (settings.bipodStepMs != previous.bipodStepMs)
+        bipodStepPreferenceKey: settings.bipodStepMs,
+      if (settings.tripodLiftMm != previous.tripodLiftMm)
+        tripodLiftPreferenceKey: settings.tripodLiftMm,
+      if (settings.bipodLiftMm != previous.bipodLiftMm)
+        bipodLiftPreferenceKey: settings.bipodLiftMm,
+    };
+    if (changed.isEmpty) return;
+    try {
+      final preferences = SharedPreferencesAsync();
+      await Future.wait(
+        changed.entries.map(
+          (entry) => preferences.setInt(entry.key, entry.value),
+        ),
+      );
+    } catch (error) {
+      debugPrint('Could not save movement settings: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not save movement settings for next launch.'),
+          ),
+        );
+      }
+    }
+  }
 
   Future<void> _sendAndNotify(BuildContext context, Command command) async {
     final ok = await udpClient.sendCommand(command);
@@ -26,19 +155,22 @@ class HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(title),
+        title: Text(widget.title),
         actions: <Widget>[
+          if (_showWifiConnect)
+            TextButton.icon(
+              onPressed: _wifiBusy ? null : _toggleRobotWifi,
+              icon: Icon(_wifiConnected ? Icons.wifi : Icons.wifi_off),
+              label: Text(
+                _wifiBusy
+                    ? (_wifiConnected ? 'Disconnecting…' : 'Connecting…')
+                    : (_wifiConnected ? 'Disconnect Wi-Fi' : 'Connect Wi-Fi'),
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.settings),
             tooltip: 'Settings',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => SettingsPage(title: 'Settings'),
-                ),
-              );
-            },
+            onPressed: _openSettings,
           ),
         ],
       ),
@@ -55,8 +187,10 @@ class HomePage extends StatelessWidget {
                   children: [
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: () async =>
-                            _sendAndNotify(context, StopCommand()),
+                        onPressed: () async {
+                          _joystickStopped = true;
+                          await _sendAndNotify(context, StopCommand());
+                        },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red,
                         ),
@@ -67,8 +201,10 @@ class HomePage extends StatelessWidget {
                     SizedBox(
                       height: 56,
                       child: ElevatedButton.icon(
-                        onPressed: () async =>
-                            _sendAndNotify(context, BobUpDown()),
+                        onPressed: () async => _sendAndNotify(
+                          context,
+                          BobUpDown(periodMs: _movement.bobPeriodMs),
+                        ),
                         icon: const Icon(Icons.height),
                         label: const Text('Bob up/down'),
                       ),
@@ -82,10 +218,29 @@ class HomePage extends StatelessWidget {
                 height: 260,
                 child: Joystick(
                   mode: JoystickMode.all,
+                  onStickDragStart: () => _joystickStopped = false,
                   listener: (StickDragDetails details) {
+                    if (_joystickStopped) return;
+                    final gait = _movement.gait;
+                    if (gait == WalkGait.bipod &&
+                        details.x == 0 &&
+                        details.y == 0) {
+                      return;
+                    }
                     final theta =
                         360.0 - atan2(details.x, details.y) * 180 / pi;
-                    udpClient.sendCommand(Move(theta: theta));
+                    udpClient.sendCommand(
+                      Move(
+                        theta: theta,
+                        stepMs: gait == WalkGait.bipod
+                            ? _movement.bipodStepMs
+                            : _movement.tripodStepMs,
+                        liftMm: gait == WalkGait.bipod
+                            ? _movement.bipodLiftMm
+                            : _movement.tripodLiftMm,
+                        gait: gait,
+                      ),
+                    );
                   },
                   period: const Duration(milliseconds: 50),
                   onStickDragEnd: () async {

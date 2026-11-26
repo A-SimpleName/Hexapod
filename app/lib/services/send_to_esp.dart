@@ -9,11 +9,12 @@ class UdpHexapodClient {
 
   RawDatagramSocket? _socket;
   Future<void>? _startFuture;
+  Future<bool> Function(Uint8List)? robotWifiSender;
   final int _sessionId = DateTime.now().millisecondsSinceEpoch & 0x7fffffff;
   int _nextSequence = 1;
 
   UdpHexapodClient(String ip, {this.espPort = 4210})
-      : espIp = InternetAddress(ip);
+    : espIp = InternetAddress(ip);
 
   Future<void> start() {
     _startFuture ??= _initSocket();
@@ -22,28 +23,36 @@ class UdpHexapodClient {
 
   Future<void> _initSocket() async {
     _socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
-    debugPrint('[UDP] Socket gebunden auf ${_socket!.address.address}:${_socket!.port}');
+    debugPrint(
+      '[UDP] Socket gebunden auf ${_socket!.address.address}:${_socket!.port}',
+    );
     // optional: _socket!.broadcastEnabled = true;
   }
 
   Future<bool> sendCommand(Command cmd) async {
-    await start();
-
-    final socket = _socket;
-    if (socket == null) {
-      debugPrint('[UDP] FEHLER: Socket ist null, Befehl ${cmd.id} wurde nicht gesendet.');
-      return false;
-    }
-
     final payload = Map<String, dynamic>.from(cmd.toJson())
       ..['session'] = _sessionId
       ..['seq'] = _nextSequence++;
     final data = utf8.encode(jsonEncode(payload));
     try {
+      final wifiSender = robotWifiSender;
+      if (wifiSender != null) {
+        return await wifiSender(Uint8List.fromList(data));
+      }
+
+      await start();
+      final socket = _socket;
+      if (socket == null) {
+        return false;
+      }
       final sentBytes = socket.send(data, espIp, espPort);
-      debugPrint('[UDP] Sende ${cmd.id} an ${espIp.address}:$espPort (Bytes: $sentBytes, Payload: ${utf8.decode(data)})');
+      debugPrint(
+        '[UDP] Sende ${cmd.id} an ${espIp.address}:$espPort (Bytes: $sentBytes, Payload: ${utf8.decode(data)})',
+      );
       if (sentBytes == 0) {
-        debugPrint('[UDP] WARNUNG: 0 Bytes gesendet. Ziel nicht erreichbar oder Socket-Problem moeglich.');
+        debugPrint(
+          '[UDP] WARNUNG: 0 Bytes gesendet. Ziel nicht erreichbar oder Socket-Problem moeglich.',
+        );
         return false;
       }
       return true;
@@ -56,7 +65,10 @@ class UdpHexapodClient {
     }
   }
 
-  Future<void> sendStopBurst({int count = 3, Duration gap = const Duration(milliseconds: 30)}) async {
+  Future<void> sendStopBurst({
+    int count = 3,
+    Duration gap = const Duration(milliseconds: 30),
+  }) async {
     for (var i = 0; i < count; i++) {
       await sendCommand(StopCommand());
       if (i < count - 1) {

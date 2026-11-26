@@ -16,8 +16,9 @@ abstract class Command {
       case 'circle_jerk':
         return CircleJerk.fromJson(json);
       case 'bob_up_down':
-        return BobUpDown();
+        return BobUpDown.fromJson(json);
       case 'move':
+      case 'move_bipod':
         return Move.fromJson(json);
       case 'stop':
         return StopCommand();
@@ -95,28 +96,99 @@ class CircleJerk extends Command {
 }
 
 class BobUpDown extends Command {
-  BobUpDown() : super(id: 'bob_up_down');
+  static const defaultPeriodMs = 2400;
+  static const minPeriodMs = 1600;
+  static const maxPeriodMs = 4800;
+
+  final int? periodMs;
+
+  BobUpDown({this.periodMs}) : super(id: 'bob_up_down');
+
+  factory BobUpDown.fromJson(Map<String, dynamic> json) {
+    final period = Command.readDouble(json['period_ms']);
+    if (period != null &&
+        period >= minPeriodMs &&
+        period <= maxPeriodMs &&
+        period == period.round()) {
+      return BobUpDown(periodMs: period.toInt());
+    }
+    return BobUpDown();
+  }
+
+  @override
+  Map<String, dynamic> get parameters => {
+    if (periodMs != null) 'period_ms': periodMs,
+  };
+
+  @override
+  Map<String, dynamic> toJson() => {...super.toJson(), ...parameters};
 }
 
 class StopCommand extends Command {
   StopCommand() : super(id: 'stop');
 }
 
-class Move extends Command {
-  final double? theta;
+enum WalkGait {
+  tripod('Tripod', 10, 22, 26),
+  bipod('Bipod', 6, 14, 16);
 
-  Move({this.theta}) : super(id: 'move');
+  final String label;
+  final int minLiftMm;
+  final int defaultLiftMm;
+  final int maxLiftMm;
+
+  const WalkGait(
+    this.label,
+    this.minLiftMm,
+    this.defaultLiftMm,
+    this.maxLiftMm,
+  );
+}
+
+class Move extends Command {
+  static const defaultStepMs = 450;
+  static const minStepMs = 300;
+  static const maxStepMs = 800;
+
+  final double? theta;
+  final int? stepMs;
+  final int? liftMm;
+  final WalkGait gait;
+
+  Move({this.theta, this.stepMs, this.liftMm, this.gait = WalkGait.tripod})
+    : super(id: gait == WalkGait.bipod ? 'move_bipod' : 'move');
 
   factory Move.fromJson(Map<String, dynamic> json) {
-    return Move(theta: Command.readDouble(json['theta']));
+    final step = Command.readDouble(json['step_ms']);
+    final gait = json['id'] == 'move_bipod' ? WalkGait.bipod : WalkGait.tripod;
+    final lift = Command.readDouble(json['lift_mm']);
+    return Move(
+      theta: Command.readDouble(json['theta']),
+      gait: gait,
+      liftMm:
+          lift != null &&
+              lift >= gait.minLiftMm &&
+              lift <= gait.maxLiftMm &&
+              lift == lift.round()
+          ? lift.toInt()
+          : null,
+      stepMs:
+          step != null &&
+              step >= minStepMs &&
+              step <= maxStepMs &&
+              step == step.round()
+          ? step.toInt()
+          : null,
+    );
   }
 
   @override
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    if (theta != null) 'theta': theta,
-  };
+  Map<String, dynamic> toJson() => {...super.toJson(), ...parameters};
 
   @override
-  Map<String, dynamic> get parameters => {if (theta != null) 'theta': theta};
+  Map<String, dynamic> get parameters => {
+    if (theta != null) 'theta': theta,
+    if (stepMs != null) 'step_ms': stepMs,
+    if (liftMm != null) 'lift_mm': liftMm,
+  };
 }
