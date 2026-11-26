@@ -18,11 +18,16 @@ enum class ActiveCommand {
     WaveLegs,
     CircleJerk,
     BobUpDown,
-    Move
+    Move,
+    Bipod,
+    BipodLanding
 };
 
 static ActiveCommand currentCommand = ActiveCommand::None;
+static long currentBobPeriodMs = BOB_DEFAULT_PERIOD_MS;
 static float currentMoveThetaDeg = 0.0f;
+static unsigned long lastBipodCommandMs = 0;
+constexpr unsigned long BIPOD_COMMAND_TIMEOUT_MS = 250;
 static long lastSessionId = -1;
 static long lastProcessedSeq = -1;
 static bool wifiEventHandlerRegistered = false;
@@ -227,6 +232,14 @@ void connectWiFi() {
     Serial.println(WiFi.softAPIP());
 }
 
+static void stopActiveCommand() {
+    if (currentCommand == ActiveCommand::Bipod) {
+        currentCommand = startBipodLanding() ? ActiveCommand::BipodLanding : ActiveCommand::None;
+    } else if (currentCommand != ActiveCommand::BipodLanding) {
+        currentCommand = ActiveCommand::None;
+    }
+}
+
 void pollUdpCommands() {
     int packetSize = udp.parsePacket();
     if (packetSize <= 0) {
@@ -274,27 +287,50 @@ void pollUdpCommands() {
     } else if (commandId == "bob_up_down") {
         if (currentCommand != ActiveCommand::BobUpDown) {
             startBobUpDown();
+            currentBobPeriodMs = BOB_DEFAULT_PERIOD_MS;
+        }
+        long periodMs;
+        if (extractLongField(payload, "period_ms", periodMs) &&
+            periodMs >= BOB_MIN_PERIOD_MS && periodMs <= BOB_MAX_PERIOD_MS) {
+            currentBobPeriodMs = periodMs;
         }
         currentCommand = ActiveCommand::BobUpDown;
-        Serial.println("UDP command: bob_up_down");
+        Serial.printf("UDP command: bob_up_down, period=%ld ms\n", currentBobPeriodMs);
     } else if (commandId == "stop") {
-        currentCommand = ActiveCommand::None;
+        stopActiveCommand();
         Serial.println("UDP command: stop");
     } else if (commandId == "recover_pwm") {
         currentCommand = ActiveCommand::None;
         recoverPwmDrivers();
         Serial.println("UDP command: recover_pwm");
-    } else if (commandId == "move") {
+    } else if (commandId == "move" || commandId == "move_bipod") {
+        const bool bipod = commandId == "move_bipod";
+        const ActiveCommand requested = bipod ? ActiveCommand::Bipod : ActiveCommand::Move;
+        if (currentCommand == ActiveCommand::BipodLanding) {
+            return;
+        }
         float thetaDeg = 0.0f;
         if (extractFloatField(payload, "theta", thetaDeg) && isfinite(thetaDeg)) {
             currentMoveThetaDeg = fmodf(thetaDeg, 360.0f);
         }
-        if (currentCommand != ActiveCommand::Move) {
-            startWalking();
-            Serial.print("UDP command: move, theta=");
-            Serial.println(currentMoveThetaDeg);
+        if (currentCommand != requested) {
+            long stepMs = WALK_DEFAULT_STEP_MS;
+            long requestedStepMs;
+            if (extractLongField(payload, "step_ms", requestedStepMs) &&
+                requestedStepMs >= WALK_MIN_STEP_MS && requestedStepMs <= WALK_MAX_STEP_MS) {
+                stepMs = requestedStepMs;
+            }
+            long liftMm = 0;
+            extractLongField(payload, "lift_mm", liftMm);
+            // Apply timing and lift once per walk, before any leg enters swing.
+            startWalking(stepMs, bipod ? WalkGait::Bipod : WalkGait::Tripod, liftMm);
+            Serial.printf("UDP command: %s, theta=%.1f, step=%ld ms\n",
+                          commandId.c_str(), currentMoveThetaDeg, stepMs);
         }
-        currentCommand = ActiveCommand::Move;
+        if (bipod) {
+            lastBipodCommandMs = millis();
+        }
+        currentCommand = requested;
     } else {
         Serial.println("UDP command unknown: " + payload);
     }
@@ -309,10 +345,22 @@ void runActiveCommand() {
             circleJerk();
             break;
         case ActiveCommand::BobUpDown:
-            bobUpDown();
+            bobUpDown(currentBobPeriodMs);
             break;
         case ActiveCommand::Move:
             walk(currentMoveThetaDeg);
+            break;
+        case ActiveCommand::Bipod:
+            if (millis() - lastBipodCommandMs >= BIPOD_COMMAND_TIMEOUT_MS) {
+                stopActiveCommand();
+            } else {
+                walk(currentMoveThetaDeg);
+            }
+            break;
+        case ActiveCommand::BipodLanding:
+            if (landBipod()) {
+                currentCommand = ActiveCommand::None;
+            }
             break;
         case ActiveCommand::None:
         default:

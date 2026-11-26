@@ -6,12 +6,20 @@ namespace {
     constexpr float STANCE_MM = 35.0f;
     constexpr unsigned long SERVO_FRAME_MS = 20;
 
-    // One step exchanges the supporting and swinging tripods.
+    // One step exchanges the supporting groups.
     constexpr float WALK_STRIDE_MM = 40.0f;
-    constexpr float WALK_LIFT_MM = 22.0f;
-    constexpr unsigned long WALK_STEP_MS = 560;
     constexpr unsigned long WALK_SETTLE_MS = 800;
     constexpr float WALK_STEERING_TIME_MS = 180.0f;
+    constexpr unsigned long BIPOD_LAND_MS = 180;
+
+    struct LiftRange {
+        long minMm;
+        long defaultMm;
+        long maxMm;
+    };
+
+    constexpr LiftRange TRIPOD_LIFT = {10, 22, 26};
+    constexpr LiftRange BIPOD_LIFT = {6, 14, 16};
 
     struct Direction {
         float x;
@@ -20,16 +28,20 @@ namespace {
 
     unsigned long walkStageStartedAtMs = 0;
     unsigned long walkLastFrameMs = 0;
+    unsigned long walkStepMs = WALK_DEFAULT_STEP_MS;
+    float walkLiftMm = TRIPOD_LIFT.defaultMm;
+    WalkGait walkGait = WalkGait::Tripod;
     bool walkSettling = false;
     Direction walkDirection;
     vec3 walkStartAngles[NUM_LEGS];
+    vec3 bipodFootTargets[NUM_LEGS];
 
     constexpr float BOB_AMPLITUDE_MM = 10.0f;
-    constexpr unsigned long BOB_PERIOD_MS = 2400;
     constexpr unsigned long BOB_SETTLE_MS = 1000;
 
     unsigned long bobStartedAtMs = 0;
     unsigned long bobLastFrameMs = 0;
+    float bobPhase = 0.0f;
     vec3 bobStartAngles[NUM_LEGS];
 
     float toRad(float degrees) {
@@ -80,17 +92,51 @@ namespace {
             });
         }
     }
+
+    vec3 walkingFoot(int leg, float offset, float lift) {
+        // Preserve the leg mounting angles and joystick convention of the tripod gait.
+        const float mounting = toRad(-60.0f * leg - 45.0f);
+        const float sinMount = sinf(mounting);
+        const float cosMount = cosf(mounting);
+        const float dx = sinMount * walkDirection.z + cosMount * walkDirection.x;
+        const float dz = cosMount * walkDirection.z - sinMount * walkDirection.x;
+        return {STANCE_MM + offset * dx, -lift, STANCE_MM + offset * dz};
+    }
+
+    void walkBipod(unsigned long elapsed, unsigned long step, float phase) {
+        const float halfStride = WALK_STRIDE_MM / 2.0f;
+        const float entry = smoothstep(min(1.0f, static_cast<float>(elapsed) / walkStepMs));
+        const int supportPair = step % 3;
+        for (int leg = 0; leg < NUM_LEGS; ++leg) {
+            // Bipod-B uses three opposite pairs around the chassis: 0/3, 1/4, 2/5.
+            const int stepsSinceStance = (supportPair + 3 - leg % 3) % 3;
+            float offset = 2.0f * phase - 1.0f;
+            float lift = 0.0f;
+            if (stepsSinceStance != 0) {
+                // Swing lasts two intervals. Match the stance velocity at takeoff and touchdown.
+                const float swingPhase = (stepsSinceStance - 1 + phase) / 2.0f;
+                offset = 1.0f + 4.0f * swingPhase - 6.0f * smoothstep(swingPhase);
+                const float arc = sinf(PI * swingPhase);
+                lift = walkLiftMm * arc * arc;
+            }
+            const vec3 foot = walkingFoot(leg, halfStride * offset * entry, lift * entry);
+            bipodFootTargets[leg] = foot;
+            moveLeg(leg, pointToServoAngles(foot));
+        }
+    }
 }
 
 void startBobUpDown() {
     bobStartedAtMs = millis();
     bobLastFrameMs = bobStartedAtMs - SERVO_FRAME_MS;
+    bobPhase = 0.0f;
     captureStartingPose(bobStartAngles);
 }
 
-void bobUpDown() {
+void bobUpDown(unsigned long periodMs) {
     const unsigned long now = millis();
-    if (now - bobLastFrameMs < SERVO_FRAME_MS) {
+    const unsigned long frameElapsed = now - bobLastFrameMs;
+    if (frameElapsed < SERVO_FRAME_MS) {
         delay(1);
         return;
     }
@@ -99,20 +145,27 @@ void bobUpDown() {
     const unsigned long elapsed = now - bobStartedAtMs;
     vec3 foot = {STANCE_MM, 0.0f, STANCE_MM};
     if (elapsed >= BOB_SETTLE_MS) {
-        const float phase = 2.0f * PI *
-            ((elapsed - BOB_SETTLE_MS) % BOB_PERIOD_MS) / BOB_PERIOD_MS;
+        const unsigned long sinceSettle = elapsed - BOB_SETTLE_MS;
+        const unsigned long motionElapsed = min(frameElapsed, sinceSettle);
+        // Accumulate phase so changing period during the motion keeps the current pose.
+        bobPhase += static_cast<float>(motionElapsed % periodMs) / periodMs;
+        bobPhase -= floorf(bobPhase);
         // Keep each foot's horizontal position fixed; body height varies from 80 to 100 mm.
-        foot.y = BOB_AMPLITUDE_MM * (cosf(phase) - 1.0f);
+        foot.y = BOB_AMPLITUDE_MM * (cosf(2.0f * PI * bobPhase) - 1.0f);
     }
     const float progress = elapsed < BOB_SETTLE_MS
         ? static_cast<float>(elapsed) / BOB_SETTLE_MS : 1.0f;
     blendToPose(bobStartAngles, pointToServoAngles(foot), smoothstep(progress));
 }
 
-void startWalking() {
+void startWalking(unsigned long stepMs, WalkGait gait, long liftMm) {
     walkStageStartedAtMs = millis();
     walkLastFrameMs = walkStageStartedAtMs - SERVO_FRAME_MS;
     walkSettling = true;
+    walkStepMs = stepMs;
+    walkGait = gait;
+    const LiftRange range = gait == WalkGait::Bipod ? BIPOD_LIFT : TRIPOD_LIFT;
+    walkLiftMm = liftMm >= range.minMm && liftMm <= range.maxMm ? liftMm : range.defaultMm;
     captureStartingPose(walkStartAngles);
 }
 
@@ -136,6 +189,11 @@ void walk(float theta) {
             walkSettling = false;
             walkStageStartedAtMs = now;
             walkDirection = requested;
+            if (walkGait == WalkGait::Bipod) {
+                for (int leg = 0; leg < NUM_LEGS; ++leg) {
+                    bipodFootTargets[leg] = {STANCE_MM, 0.0f, STANCE_MM};
+                }
+            }
         }
         return;
     }
@@ -145,8 +203,12 @@ void walk(float theta) {
     walkDirection.x = lerp(walkDirection.x, requested.x, steeringBlend);
     walkDirection.z = lerp(walkDirection.z, requested.z, steeringBlend);
 
-    const unsigned long step = elapsed / WALK_STEP_MS;
-    const float phase = static_cast<float>(elapsed % WALK_STEP_MS) / WALK_STEP_MS;
+    const unsigned long step = elapsed / walkStepMs;
+    const float phase = static_cast<float>(elapsed % walkStepMs) / walkStepMs;
+    if (walkGait == WalkGait::Bipod) {
+        walkBipod(elapsed, step, phase);
+        return;
+    }
     const float halfStride = WALK_STRIDE_MM / 2.0f;
     const bool firstStep = step == 0;
 
@@ -160,19 +222,35 @@ void walk(float theta) {
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         const bool supporting = leg % 2 == step % 2;
         const float offset = halfStride * (supporting ? stance : swing);
-        // Preserve the leg mounting angles and joystick convention of the original gait.
-        const float mounting = toRad(-60.0f * leg - 45.0f);
-        const float sinMount = sinf(mounting);
-        const float cosMount = cosf(mounting);
-        const float dx = sinMount * walkDirection.z + cosMount * walkDirection.x;
-        const float dz = cosMount * walkDirection.z - sinMount * walkDirection.x;
-        const vec3 foot = {
-            STANCE_MM + offset * dx,
-            supporting ? 0.0f : -WALK_LIFT_MM * lift * lift,
-            STANCE_MM + offset * dz
-        };
+        const vec3 foot = walkingFoot(leg, offset, supporting ? 0.0f : walkLiftMm * lift * lift);
         moveLeg(leg, pointToServoAngles(foot));
     }
+}
+
+bool startBipodLanding() {
+    if (walkGait != WalkGait::Bipod || walkSettling) {
+        return false;
+    }
+    walkStageStartedAtMs = millis();
+    walkLastFrameMs = walkStageStartedAtMs - SERVO_FRAME_MS;
+    return true;
+}
+
+bool landBipod() {
+    const unsigned long now = millis();
+    if (now - walkLastFrameMs < SERVO_FRAME_MS) {
+        delay(1);
+        return false;
+    }
+    walkLastFrameMs = now;
+    const float progress = min(1.0f, static_cast<float>(now - walkStageStartedAtMs) / BIPOD_LAND_MS);
+    const float liftRemaining = 1.0f - smoothstep(progress);
+    for (int leg = 0; leg < NUM_LEGS; ++leg) {
+        vec3 foot = bipodFootTargets[leg];
+        foot.y *= liftRemaining;
+        moveLeg(leg, pointToServoAngles(foot));
+    }
+    return progress >= 1.0f;
 }
 
 vec3 pointToServoAngles(vec3 point) {
