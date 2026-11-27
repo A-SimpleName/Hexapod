@@ -29,7 +29,7 @@ For walking and Bob, motion code updates joint targets about every 20 ms. [servo
 
 ## Movement behavior
 
-- **Tripod** alternates the even- and odd-numbered leg groups. Walking starts with an 800 ms transition to the standing pose, and steering blends between direction vectors.
+- **Tripod** alternates the even- and odd-numbered leg groups. Walking starts with a 400 ms transition to the standing pose, and steering blends between direction vectors.
 - **Bipod** uses the [Bipod-B footfall pattern](https://pmc.ncbi.nlm.nih.gov/articles/PMC5321742/#f4) with pairs 0/3, 1/4, and 2/5. The outgoing pair stays grounded through the first 20% of the next support interval. Travel ramps up from centered feet. On stop, the gait lowers swinging feet in place and centers one pair at a time. If still entering the starting pose, it finishes that transition and holds. A requested replacement movement waits for Bipod to finish stopping.
 - **Bob up/down** blends into its starting pose over one second. It keeps the horizontal foot positions fixed and varies modeled body height from 80 to 100 mm. Changing the cycle time while Bob is active preserves its phase.
 
