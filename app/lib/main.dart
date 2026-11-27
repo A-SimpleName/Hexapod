@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 UdpHexapodClient udpClient = UdpHexapodClient('192.168.4.1');
 const bobPeriodPreferenceKey = 'bob_period_ms';
+const rotateStepPreferenceKey = 'rotate_step_ms';
 const tripodStepPreferenceKey = 'tripod_step_ms';
 const bipodStepPreferenceKey = 'bipod_step_ms';
 const tripodLiftPreferenceKey = 'tripod_lift_mm';
@@ -53,6 +54,12 @@ Future<MovementSettings> loadMovementSettings() async {
   );
   return (
     bobPeriodMs: bobPeriodMs,
+    rotateStepMs: await _loadSetting(
+      rotateStepPreferenceKey,
+      Rotate.defaultStepMs,
+      Rotate.minStepMs,
+      Rotate.maxStepMs,
+    ),
     tripodStepMs: await _loadSetting(
       tripodStepPreferenceKey,
       legacyStepMs,
@@ -135,6 +142,7 @@ class MyApp extends StatelessWidget {
               initialMovement ??
               (
                 bobPeriodMs: BobUpDown.defaultPeriodMs,
+                rotateStepMs: Rotate.defaultStepMs,
                 tripodStepMs: Move.defaultStepMs,
                 bipodStepMs: Move.defaultStepMs,
                 tripodLiftMm: WalkGait.tripod.defaultLiftMm,

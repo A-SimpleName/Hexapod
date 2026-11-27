@@ -30,6 +30,7 @@ For walking and Bob, motion code updates joint targets about every 20 ms. [servo
 ## Movement behavior
 
 - **Tripod** alternates the even- and odd-numbered leg groups. Walking starts with a 400 ms transition to the standing pose, and steering blends between direction vectors.
+- **Rotate** uses the same alternating groups and 400 ms startup transition. The stance feet move tangentially around the body to turn in place. On stop, the firmware lowers raised feet, then returns one group at a time to the standing stance.
 - **Bipod** uses the [Bipod-B footfall pattern](https://pmc.ncbi.nlm.nih.gov/articles/PMC5321742/#f4) with pairs 0/3, 1/4, and 2/5. The outgoing pair stays grounded through the first 20% of the next support interval. Travel ramps up from centered feet. On stop, the gait lowers swinging feet in place and centers one pair at a time. If still entering the starting pose, it finishes that transition and holds. A requested replacement movement waits for Bipod to finish stopping.
 - **Bob up/down** blends into its starting pose over one second. It keeps the horizontal foot positions fixed and varies modeled body height from 80 to 100 mm. Changing the cycle time while Bob is active preserves its phase.
 
@@ -56,13 +57,16 @@ Example walking packet:
 | --- | --- | --- |
 | `move` | `theta`, `step_ms`, `lift_mm` | Walk using Tripod. Lift accepts 10–26 mm and defaults to 22 mm. |
 | `move_bipod` | `theta`, `step_ms`, `lift_mm` | Walk using Bipod. Lift accepts 6–16 mm and defaults to 14 mm. This command is available in firmware regardless of the Flutter app's local Bipod setting. |
+| `rotate` | `direction`, `step_ms` | Turn in place using Tripod. Use `-1` for left (counterclockwise) or `1` for right (clockwise) as viewed from above. Defaults to right. Step time accepts 200–800 ms and defaults to 400 ms. |
 | `bob_up_down` | `period_ms` | Repeat the body-height cycle. Accepts 400–4800 ms and defaults to 2000 ms when entering Bob. Omitted or out-of-range values leave the current period in effect while Bob is active. |
 | `wave_legs` | | Run the built-in leg wave. The firmware uses its preset even if a client sends `speed` or `legOffsets`. |
 | `circle_jerk` | | Run the built-in joint sweep. The firmware uses its preset even if a client sends `speed`. |
-| `stop` | | End the active motion and clear queued motion. Bipod returns to its standing pose. Other motions hold their last commanded servo positions. |
+| `stop` | | End the active motion and clear queued motion. Bipod and rotation return to the standing pose. Other motions hold their last commanded servo positions. |
 | `recover_pwm` | | Maintenance command that clears active and queued motion, reinitializes both PWM boards, and disables the mapped servo outputs. |
 
 For both walking commands, send the same gait ID about every **50 ms** while steering. Send a finite direction angle in degrees as `theta`. The Flutter joystick maps down to 0° (also 360°), left to 90°, up to 180°, and right to 270°. An omitted angle keeps the last direction, initially 0°. `step_ms` is the time per gait step, with an accepted range of **100–800 ms** and a default of **300 ms**. Smaller values step faster. The firmware picks step time and lift when the gait starts, and updates the angle on each packet. Stop the gait and start it again to apply different timing or lift. Missing or out-of-range step time and lift use their respective defaults on the next start.
+
+To start a left turn, send `{"id":"rotate","direction":-1,"step_ms":400}` once. Shorter steps turn faster. The physical turn rate depends on the robot. The robot keeps turning until it receives Stop or another movement. A change in direction or step time goes through the standing stance before the next turn starts.
 
 Bipod starts its stopping sequence after **250 ms** without a fresh Bipod command. Tripod and the repeating motions keep running until a Stop or replacement command arrives. Send Stop when motion input is released or before disconnecting. The Flutter app repeats Stop three times with 30 ms gaps on joystick release to improve delivery over UDP.
 

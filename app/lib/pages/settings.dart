@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 typedef MovementSettings = ({
   int bobPeriodMs,
+  int rotateStepMs,
   int tripodStepMs,
   int bipodStepMs,
   int tripodLiftMm,
@@ -32,6 +33,7 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   late int _bobPeriodMs = widget.initialSettings.bobPeriodMs;
+  late int _rotateStepMs = widget.initialSettings.rotateStepMs;
   late final _stepTimes = {
     WalkGait.tripod: widget.initialSettings.tripodStepMs,
     WalkGait.bipod: widget.initialSettings.bipodStepMs,
@@ -187,6 +189,23 @@ class _SettingsPageState extends State<SettingsPage> {
                                 ],
                               ),
                             ),
+                          SizedBox(
+                            width: controlWidth,
+                            child: _MotionSlider(
+                              sliderKey: const ValueKey('rotate-speed'),
+                              title: 'Rotation speed',
+                              valueLabel: 'Step time',
+                              value: _rotateStepMs,
+                              range: _limits.rangeFor(
+                                MotionControl.rotateSpeed,
+                              ),
+                              increment: 20,
+                              format: (ms) => '$ms ms',
+                              fasterOnRight: true,
+                              onChanged: (ms) =>
+                                  setState(() => _rotateStepMs = ms),
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 20),
@@ -196,6 +215,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           onPressed: () =>
                               Navigator.pop<MovementSettings>(context, (
                                 bobPeriodMs: _bobPeriodMs,
+                                rotateStepMs: _rotateStepMs,
                                 tripodStepMs: _stepTimes[WalkGait.tripod]!,
                                 bipodStepMs: _stepTimes[WalkGait.bipod]!,
                                 tripodLiftMm: _liftHeights[WalkGait.tripod]!,

@@ -113,6 +113,7 @@ class _HomePageState extends State<HomePage> {
         _joystickStopped = true;
         _movement = (
           bobPeriodMs: _movement.bobPeriodMs,
+          rotateStepMs: _movement.rotateStepMs,
           tripodStepMs: _movement.tripodStepMs,
           bipodStepMs: _movement.bipodStepMs,
           tripodLiftMm: _movement.tripodLiftMm,
@@ -143,6 +144,8 @@ class _HomePageState extends State<HomePage> {
     final changed = {
       if (settings.bobPeriodMs != previous.bobPeriodMs)
         bobPeriodPreferenceKey: settings.bobPeriodMs,
+      if (settings.rotateStepMs != previous.rotateStepMs)
+        rotateStepPreferenceKey: settings.rotateStepMs,
       if (settings.tripodStepMs != previous.tripodStepMs)
         tripodStepPreferenceKey: settings.tripodStepMs,
       if (settings.bipodStepMs != previous.bipodStepMs)
@@ -232,6 +235,40 @@ class _HomePageState extends State<HomePage> {
                         ),
                         icon: const Icon(Icons.height),
                         label: const Text('Bob up/down'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 48,
+                      child: PopupMenuButton<RotationDirection>(
+                        onSelected: (direction) {
+                          _joystickStopped = true;
+                          udpClient.sendCommand(
+                            Rotate(
+                              direction: direction,
+                              stepMs: _limits.limit(
+                                MotionControl.rotateSpeed,
+                                _movement.rotateStepMs,
+                              ),
+                            ),
+                          );
+                        },
+                        itemBuilder: (context) => [
+                          for (final direction in RotationDirection.values)
+                            PopupMenuItem(
+                              value: direction,
+                              child: Text('Rotate ${direction.name}'),
+                            ),
+                        ],
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.rotate_right),
+                            SizedBox(width: 8),
+                            Text('Rotate'),
+                            Icon(Icons.arrow_drop_down),
+                          ],
+                        ),
                       ),
                     ),
                   ],

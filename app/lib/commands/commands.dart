@@ -17,6 +17,8 @@ abstract class Command {
         return CircleJerk.fromJson(json);
       case 'bob_up_down':
         return BobUpDown.fromJson(json);
+      case 'rotate':
+        return Rotate.fromJson(json);
       case 'move':
       case 'move_bipod':
         return Move.fromJson(json);
@@ -120,6 +122,45 @@ class BobUpDown extends Command {
   @override
   Map<String, dynamic> get parameters => {
     if (periodMs != null) 'period_ms': periodMs,
+  };
+
+  @override
+  Map<String, dynamic> toJson() => {...super.toJson(), ...parameters};
+}
+
+enum RotationDirection {
+  left(-1),
+  right(1);
+
+  const RotationDirection(this.wireValue);
+
+  final int wireValue;
+}
+
+class Rotate extends Command {
+  static const defaultStepMs = 400;
+  static const minStepMs = 200;
+  static const maxStepMs = 800;
+
+  final RotationDirection direction;
+  final int? stepMs;
+
+  Rotate({this.direction = RotationDirection.right, this.stepMs})
+    : super(id: 'rotate');
+
+  factory Rotate.fromJson(Map<String, dynamic> json) => Rotate(
+    direction: switch (Command.readDouble(json['direction'] ?? 1)) {
+      -1 => RotationDirection.left,
+      1 => RotationDirection.right,
+      _ => throw const FormatException('Rotation direction must be -1 or 1'),
+    },
+    stepMs: Command._readBoundedInt(json['step_ms'], minStepMs, maxStepMs),
+  );
+
+  @override
+  Map<String, dynamic> get parameters => {
+    'direction': direction.wireValue,
+    if (stepMs != null) 'step_ms': stepMs,
   };
 
   @override

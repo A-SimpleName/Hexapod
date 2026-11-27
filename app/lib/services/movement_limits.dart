@@ -8,6 +8,7 @@ typedef MotionRange = ({int min, int max});
 
 enum MotionControl {
   bobSpeed('Bob cycle time', 'ms'),
+  rotateSpeed('Rotation step time', 'ms'),
   tripodSpeed('Tripod step time', 'ms'),
   tripodHeight('Tripod step height', 'mm'),
   bipodSpeed('Bipod step time', 'ms'),
@@ -20,6 +21,7 @@ enum MotionControl {
 
   MotionRange get firmwareRange => switch (this) {
     bobSpeed => (min: BobUpDown.minPeriodMs, max: BobUpDown.maxPeriodMs),
+    rotateSpeed => (min: Rotate.minStepMs, max: Rotate.maxStepMs),
     tripodSpeed || bipodSpeed => (min: Move.minStepMs, max: Move.maxStepMs),
     tripodHeight => (
       min: WalkGait.tripod.minLiftMm,

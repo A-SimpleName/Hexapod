@@ -13,14 +13,18 @@ constexpr long BOB_MAX_PERIOD_MS = 4800;
 constexpr long WALK_DEFAULT_STEP_MS = 300;
 constexpr long WALK_MIN_STEP_MS = 100;
 constexpr long WALK_MAX_STEP_MS = 800;
+constexpr long ROTATE_DEFAULT_STEP_MS = 400;
+constexpr long ROTATE_MIN_STEP_MS = 200;
+constexpr long ROTATE_MAX_STEP_MS = 800;
 
 enum class WalkGait { Tripod, Bipod };
 
 void startWalking(unsigned long stepMs = WALK_DEFAULT_STEP_MS, WalkGait gait = WalkGait::Tripod,
                   long liftMm = 0);
-// Returns true when a requested Bipod stop reaches the standing pose.
+void startRotating(unsigned long stepMs, int direction);
+// Returns true when a requested stop reaches the standing pose.
 bool walk(float theta);
-void startBipodStop();
+void startWalkStop();
 void startBobUpDown();
 void bobUpDown(unsigned long periodMs = BOB_DEFAULT_PERIOD_MS);
 vec3 pointToAngles(vec3 point);

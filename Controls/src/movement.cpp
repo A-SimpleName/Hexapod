@@ -11,13 +11,15 @@ namespace {
     constexpr float WALK_STRIDE_MM = 40.0f;
     constexpr unsigned long WALK_SETTLE_MS = 400;
     constexpr float WALK_STEERING_TIME_MS = 180.0f;
-    constexpr unsigned long BIPOD_LAND_MS = 180;
-    constexpr unsigned long BIPOD_CENTER_PAIR_MS = 240;
+    constexpr unsigned long WALK_LAND_MS = 180;
+    constexpr unsigned long WALK_CENTER_GROUP_MS = 240;
     constexpr int BIPOD_PAIR_COUNT = NUM_LEGS / 2;
     // Each new pair touches down one interval after the last, with 20% overlap.
     constexpr float BIPOD_STANCE_STEPS = 1.2f;
     constexpr float BIPOD_ADVANCE_MM = WALK_STRIDE_MM / BIPOD_STANCE_STEPS;
-    constexpr float BIPOD_CENTER_LIFT_MM = 6.0f;
+    constexpr float WALK_CENTER_LIFT_MM = 6.0f;
+    constexpr float ROTATE_HALF_STRIDE_MM = 12.0f;
+    constexpr long ROTATE_LIFT_MM = 14;
 
     struct LiftRange {
         long minMm;
@@ -43,8 +45,9 @@ namespace {
     WalkStage walkStage = WalkStage::Standing;
     Direction walkDirection;
     vec3 walkStartAngles[NUM_LEGS];
-    vec3 bipodFootTargets[NUM_LEGS];
-    int bipodCenterPair = 0;
+    int turnDirection = 0;
+    vec3 walkFootTargets[NUM_LEGS];
+    int walkCenterGroup = 0;
 
     constexpr float BOB_AMPLITUDE_MM = 10.0f;
     constexpr unsigned long BOB_SETTLE_MS = 1000;
@@ -117,6 +120,13 @@ namespace {
         return {STANCE_MM + offset * dx, -lift, STANCE_MM + offset * dz};
     }
 
+    vec3 turningFoot(float offset, float lift) {
+        // Every neutral foot points radially outward at 45 degrees in leg coordinates.
+        // A tangent to that radius moves the stance feet opposite the body's turn.
+        const float tangent = offset * turnDirection * 0.70710678f;
+        return {STANCE_MM + tangent, -lift, STANCE_MM - tangent};
+    }
+
     float bipodStartupTravel(float timeInSteps) {
         // Integrate a linear ramp to the steady walking speed over the first interval.
         return timeInSteps < 1.0f ? 0.5f * timeInSteps * timeInSteps : timeInSteps - 0.5f;
@@ -145,26 +155,26 @@ namespace {
             // Bipod-B pairs opposite legs: 0/3, 1/4, 2/5.
             for (int leg = pair; leg < NUM_LEGS; leg += BIPOD_PAIR_COUNT) {
                 const vec3 foot = walkingFoot(leg, BIPOD_ADVANCE_MM * offset, lift);
-                bipodFootTargets[leg] = foot;
+                walkFootTargets[leg] = foot;
                 moveLeg(leg, pointToServoAngles(foot));
             }
         }
     }
 
-    void lowerBipodFeet(float blend) {
+    void lowerWalkingFeet(float blend) {
         for (int leg = 0; leg < NUM_LEGS; ++leg) {
-            vec3 foot = bipodFootTargets[leg];
+            vec3 foot = walkFootTargets[leg];
             foot.y *= 1.0f - blend;
             moveLeg(leg, pointToServoAngles(foot));
         }
     }
 
-    void centerBipodPair(float blend) {
-        // Reposition only this pair. The other four feet keep their grounded targets.
-        for (int leg = bipodCenterPair; leg < NUM_LEGS; leg += BIPOD_PAIR_COUNT) {
-            const vec3 from = bipodFootTargets[leg];
+    void centerWalkingGroup(float blend, int groupCount) {
+        // Reposition one group at a time so the other feet stay grounded.
+        for (int leg = walkCenterGroup; leg < NUM_LEGS; leg += groupCount) {
+            const vec3 from = walkFootTargets[leg];
             const float distance = hypotf(from.x - STANDING_FOOT.x, from.z - STANDING_FOOT.z);
-            const float lift = min(BIPOD_CENTER_LIFT_MM, distance) * 4.0f * blend * (1.0f - blend);
+            const float lift = min(WALK_CENTER_LIFT_MM, distance) * 4.0f * blend * (1.0f - blend);
             const vec3 foot = {
                 lerp(from.x, STANDING_FOOT.x, blend),
                 -lift,
@@ -212,12 +222,18 @@ void startWalking(unsigned long stepMs, WalkGait gait, long liftMm) {
     walkStage = WalkStage::Settling;
     walkStepMs = stepMs;
     walkGait = gait;
+    turnDirection = 0;
     const LiftRange range = gait == WalkGait::Bipod ? BIPOD_LIFT : TRIPOD_LIFT;
     walkLiftMm = liftMm >= range.minMm && liftMm <= range.maxMm ? liftMm : range.defaultMm;
     captureStartingPose(walkStartAngles);
 }
 
-void startBipodStop() {
+void startRotating(unsigned long stepMs, int direction) {
+    startWalking(stepMs, WalkGait::Tripod, ROTATE_LIFT_MM);
+    turnDirection = direction;
+}
+
+void startWalkStop() {
     if (walkStage == WalkStage::Settling) {
         walkStage = WalkStage::SettlingToStop;
     } else if (walkStage == WalkStage::Striding) {
@@ -250,8 +266,8 @@ bool walk(float theta) {
             walkStage = WalkStage::Striding;
             walkStageStartedAtMs = now;
             walkDirection = directionForTheta(theta);
-            if (walkGait == WalkGait::Bipod) {
-                for (vec3& foot : bipodFootTargets) {
+            if (walkGait == WalkGait::Bipod || turnDirection != 0) {
+                for (vec3& foot : walkFootTargets) {
                     foot = STANDING_FOOT;
                 }
             }
@@ -260,18 +276,19 @@ bool walk(float theta) {
     }
 
     if (walkStage == WalkStage::Lowering) {
-        lowerBipodFeet(smoothstep(stageProgress(elapsed, BIPOD_LAND_MS)));
-        if (elapsed >= BIPOD_LAND_MS) {
+        lowerWalkingFeet(smoothstep(stageProgress(elapsed, WALK_LAND_MS)));
+        if (elapsed >= WALK_LAND_MS) {
             walkStage = WalkStage::Centering;
             walkStageStartedAtMs = now;
-            bipodCenterPair = 0;
+            walkCenterGroup = 0;
         }
         return false;
     }
     if (walkStage == WalkStage::Centering) {
-        centerBipodPair(smoothstep(stageProgress(elapsed, BIPOD_CENTER_PAIR_MS)));
-        if (elapsed >= BIPOD_CENTER_PAIR_MS) {
-            if (++bipodCenterPair == BIPOD_PAIR_COUNT) {
+        const int groupCount = walkGait == WalkGait::Bipod ? BIPOD_PAIR_COUNT : 2;
+        centerWalkingGroup(smoothstep(stageProgress(elapsed, WALK_CENTER_GROUP_MS)), groupCount);
+        if (elapsed >= WALK_CENTER_GROUP_MS) {
+            if (++walkCenterGroup == groupCount) {
                 walkStage = WalkStage::Standing;
                 return true;
             }
@@ -292,7 +309,8 @@ bool walk(float theta) {
         walkBipod(step, phase);
         return false;
     }
-    const float halfStride = WALK_STRIDE_MM / 2.0f;
+    const bool turning = turnDirection != 0;
+    const float halfStride = turning ? ROTATE_HALF_STRIDE_MM : WALK_STRIDE_MM / 2.0f;
     const bool firstStep = step == 0;
 
     // Start centered and reach normal stride speed by the first exchange.
@@ -305,7 +323,11 @@ bool walk(float theta) {
     for (int leg = 0; leg < NUM_LEGS; ++leg) {
         const bool supporting = leg % 2 == step % 2;
         const float offset = halfStride * (supporting ? stance : swing);
-        const vec3 foot = walkingFoot(leg, offset, supporting ? 0.0f : walkLiftMm * lift * lift);
+        const float footLift = supporting ? 0.0f : walkLiftMm * lift * lift;
+        const vec3 foot = turning ? turningFoot(offset, footLift) : walkingFoot(leg, offset, footLift);
+        if (turning) {
+            walkFootTargets[leg] = foot;
+        }
         moveLeg(leg, pointToServoAngles(foot));
     }
     return false;

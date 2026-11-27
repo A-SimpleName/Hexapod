@@ -145,6 +145,7 @@ void main() {
     final initialMovement = await loadMovementSettings();
     expect(initialMovement.tripodStepMs, oldStepMs);
     expect(initialMovement.bipodStepMs, oldStepMs);
+    expect(initialMovement.rotateStepMs, Rotate.defaultStepMs);
     expect(initialMovement.tripodLiftMm, WalkGait.tripod.defaultLiftMm);
     expect(initialMovement.bipodLiftMm, WalkGait.bipod.defaultLiftMm);
     await tester.pumpWidget(MyApp(initialMovement: initialMovement));
@@ -209,6 +210,12 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Lift: ${WalkGait.bipod.minLiftMm} mm'), findsOneWidget);
+    final rotateControl = find.byKey(const ValueKey('rotate-speed'));
+    await tester.ensureVisible(rotateControl);
+    final rotateSlider = tester.getRect(rotateControl);
+    await tester.tapAt(Offset(rotateSlider.right - 8, rotateSlider.center.dy));
+    await tester.pumpAndSettle();
+    expect(find.text('Step time: ${Rotate.minStepMs} ms'), findsOneWidget);
     await tester.ensureVisible(find.text('Save'));
     await tester.tap(find.text('Save'));
     await tester.pump();
@@ -218,6 +225,7 @@ void main() {
       BobUpDown.minPeriodMs,
     );
     final reloadedMovement = await loadMovementSettings();
+    expect(reloadedMovement.rotateStepMs, Rotate.minStepMs);
     expect(reloadedMovement.tripodStepMs, Move.maxStepMs);
     expect(reloadedMovement.bipodStepMs, Move.minStepMs);
     expect(reloadedMovement.tripodLiftMm, WalkGait.tripod.maxLiftMm);
@@ -234,6 +242,24 @@ void main() {
     expect(stop['id'], 'stop');
     expect(stop['seq'], 3);
     expect(stop['session'], bob['session']);
+
+    for (final direction in RotationDirection.values) {
+      await tester.tap(find.text('Rotate'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.tap(find.text('Rotate ${direction.name}'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      final rotation = (await tester.runAsync(receiveCommand))!;
+      expect(rotation['id'], 'rotate');
+      expect(rotation['direction'], direction.wireValue);
+      expect(rotation['step_ms'], Rotate.minStepMs);
+      final command = Command.fromJson(rotation) as Rotate;
+      expect(command.direction, direction);
+      expect(command.stepMs, Rotate.minStepMs);
+    }
+    await tester.tap(find.text('Stop'));
+    expect((await tester.runAsync(receiveCommand))!['id'], 'stop');
 
     Future<void> verifyWalk(
       String id,

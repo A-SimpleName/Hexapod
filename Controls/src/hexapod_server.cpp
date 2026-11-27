@@ -20,12 +20,15 @@ enum class ActiveCommand {
     BobUpDown,
     Move,
     Bipod,
-    BipodStopping
+    Rotate,
+    ReturningToStand
 };
 
 static ActiveCommand currentCommand = ActiveCommand::None;
 static long currentBobPeriodMs = BOB_DEFAULT_PERIOD_MS;
 static float currentMoveThetaDeg = 0.0f;
+static long currentRotateStepMs = ROTATE_DEFAULT_STEP_MS;
+static long currentRotateDirection = 1;
 static unsigned long lastBipodCommandMs = 0;
 constexpr unsigned long BIPOD_COMMAND_TIMEOUT_MS = 250;
 static String pendingMovement;
@@ -206,10 +209,10 @@ void connectWiFi() {
 }
 
 static void stopActiveCommand() {
-    if (currentCommand == ActiveCommand::Bipod) {
-        startBipodStop();
-        currentCommand = ActiveCommand::BipodStopping;
-    } else if (currentCommand != ActiveCommand::BipodStopping) {
+    if (currentCommand == ActiveCommand::Bipod || currentCommand == ActiveCommand::Rotate) {
+        startWalkStop();
+        currentCommand = ActiveCommand::ReturningToStand;
+    } else if (currentCommand != ActiveCommand::ReturningToStand) {
         currentCommand = ActiveCommand::None;
     }
 }
@@ -237,6 +240,30 @@ static void applyCommand(const String& payload, const String& commandId) {
         }
         currentCommand = ActiveCommand::BobUpDown;
         Serial.printf("UDP command: bob_up_down, period=%ld ms\n", currentBobPeriodMs);
+    } else if (commandId == "rotate") {
+        long direction = 1;
+        extractLongField(payload, "direction", direction);
+        if (direction != -1 && direction != 1) {
+            return;
+        }
+        long stepMs;
+        if (!extractLongField(payload, "step_ms", stepMs) ||
+            stepMs < ROTATE_MIN_STEP_MS || stepMs > ROTATE_MAX_STEP_MS) {
+            stepMs = ROTATE_DEFAULT_STEP_MS;
+        }
+        if (currentCommand == ActiveCommand::Rotate) {
+            if (stepMs != currentRotateStepMs || direction != currentRotateDirection) {
+                stopActiveCommand();
+                pendingMovement = payload;
+                pendingMovementReceivedAtMs = millis();
+            }
+            return;
+        }
+        currentRotateStepMs = stepMs;
+        currentRotateDirection = direction;
+        startRotating(stepMs, direction);
+        currentCommand = ActiveCommand::Rotate;
+        Serial.printf("UDP command: rotate, direction=%ld, step=%ld ms\n", direction, stepMs);
     } else if (commandId == "stop") {
         pendingMovement = "";
         stopActiveCommand();
@@ -315,13 +342,14 @@ void pollUdpCommands() {
         lastProcessedSeq = seq;
     }
 
-    const bool commandsMovement = isWalkCommand(commandId) || commandId == "bob_up_down" ||
+    const bool commandsMovement = isWalkCommand(commandId) || commandId == "rotate" || commandId == "bob_up_down" ||
         commandId == "wave_legs" || commandId == "circle_jerk";
     if (commandsMovement) {
-        if (currentCommand == ActiveCommand::Bipod && commandId != "move_bipod") {
+        if ((currentCommand == ActiveCommand::Bipod && commandId != "move_bipod") ||
+            (currentCommand == ActiveCommand::Rotate && commandId != "rotate")) {
             stopActiveCommand();
         }
-        if (currentCommand == ActiveCommand::BipodStopping) {
+        if (currentCommand == ActiveCommand::ReturningToStand) {
             pendingMovement = payload;
             pendingMovementReceivedAtMs = millis();
             return;
@@ -351,7 +379,10 @@ void runActiveCommand() {
                 walk(currentMoveThetaDeg);
             }
             break;
-        case ActiveCommand::BipodStopping:
+        case ActiveCommand::Rotate:
+            walk(0.0f);
+            break;
+        case ActiveCommand::ReturningToStand:
             if (walk(currentMoveThetaDeg)) {
                 currentCommand = ActiveCommand::None;
                 if (pendingMovement.length() > 0) {
