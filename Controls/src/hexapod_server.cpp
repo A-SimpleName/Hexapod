@@ -112,7 +112,8 @@ String extractIdField(const String& payload) {
 }
 
 // Parses numeric fields like "theta": 12.3 or "theta":"12.3".
-bool extractFloatField(const String& payload, const char* fieldName, float& outValue) {
+static bool extractNumericField(const String& payload, const char* fieldName,
+                                bool allowFloatSyntax, String& value) {
     String key = String("\"") + fieldName + "\"";
     int fieldPos = payload.indexOf(key);
     if (fieldPos < 0) {
@@ -145,7 +146,9 @@ bool extractFloatField(const String& payload, const char* fieldName, float& outV
                 break;
             }
         } else {
-            if (!(isdigit((unsigned char)c) || c == '-' || c == '+' || c == '.' || c == 'e' || c == 'E')) {
+            const bool digitOrSign = isdigit((unsigned char)c) || c == '-' || c == '+';
+            const bool fractionOrExponent = allowFloatSyntax && (c == '.' || c == 'e' || c == 'E');
+            if (!digitOrSign && !fractionOrExponent) {
                 break;
             }
         }
@@ -156,56 +159,24 @@ bool extractFloatField(const String& payload, const char* fieldName, float& outV
         return false;
     }
 
-    String value = payload.substring(start, end);
+    value = payload.substring(start, end);
+    return true;
+}
+
+bool extractFloatField(const String& payload, const char* fieldName, float& outValue) {
+    String value;
+    if (!extractNumericField(payload, fieldName, true, value)) {
+        return false;
+    }
     outValue = value.toFloat();
     return true;
 }
 
 bool extractLongField(const String& payload, const char* fieldName, long& outValue) {
-    String key = String("\"") + fieldName + "\"";
-    int fieldPos = payload.indexOf(key);
-    if (fieldPos < 0) {
+    String value;
+    if (!extractNumericField(payload, fieldName, false, value)) {
         return false;
     }
-
-    int colonPos = payload.indexOf(':', fieldPos);
-    if (colonPos < 0) {
-        return false;
-    }
-
-    int start = colonPos + 1;
-    while (start < payload.length() && isspace((unsigned char)payload[start])) {
-        start++;
-    }
-    if (start >= payload.length()) {
-        return false;
-    }
-
-    bool quoted = payload[start] == '"';
-    if (quoted) {
-        start++;
-    }
-
-    int end = start;
-    while (end < payload.length()) {
-        char c = payload[end];
-        if (quoted) {
-            if (c == '"') {
-                break;
-            }
-        } else {
-            if (!(isdigit((unsigned char)c) || c == '-' || c == '+')) {
-                break;
-            }
-        }
-        end++;
-    }
-
-    if (end <= start) {
-        return false;
-    }
-
-    String value = payload.substring(start, end);
     outValue = value.toInt();
     return true;
 }

@@ -37,6 +37,16 @@ enum MotionControl {
   }
 }
 
+extension WalkGaitMotionControls on WalkGait {
+  MotionControl get stepTimeControl => this == WalkGait.bipod
+      ? MotionControl.bipodSpeed
+      : MotionControl.tripodSpeed;
+
+  MotionControl get stepHeightControl => this == WalkGait.bipod
+      ? MotionControl.bipodHeight
+      : MotionControl.tripodHeight;
+}
+
 class MovementLimits {
   static const _preferenceKey = 'movement_limits';
 

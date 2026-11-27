@@ -162,9 +162,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                     valueLabel: 'Step time',
                                     value: _stepTimes[gait]!,
                                     range: _limits.rangeFor(
-                                      gait == WalkGait.bipod
-                                          ? MotionControl.bipodSpeed
-                                          : MotionControl.tripodSpeed,
+                                      gait.stepTimeControl,
                                     ),
                                     increment: 20,
                                     format: (ms) => '$ms ms',
@@ -179,9 +177,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                     valueLabel: 'Lift',
                                     value: _liftHeights[gait]!,
                                     range: _limits.rangeFor(
-                                      gait == WalkGait.bipod
-                                          ? MotionControl.bipodHeight
-                                          : MotionControl.tripodHeight,
+                                      gait.stepHeightControl,
                                     ),
                                     increment: 2,
                                     format: (mm) => '$mm mm',

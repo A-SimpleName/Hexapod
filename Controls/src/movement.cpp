@@ -202,8 +202,7 @@ void bobUpDown(unsigned long periodMs) {
         // Keep each foot's horizontal position fixed; body height varies from 80 to 100 mm.
         foot.y = BOB_AMPLITUDE_MM * (cosf(2.0f * PI * bobPhase) - 1.0f);
     }
-    const float progress = elapsed < BOB_SETTLE_MS
-        ? static_cast<float>(elapsed) / BOB_SETTLE_MS : 1.0f;
+    const float progress = stageProgress(elapsed, BOB_SETTLE_MS);
     blendToPose(bobStartAngles, pointToServoAngles(foot), smoothstep(progress));
 }
 
