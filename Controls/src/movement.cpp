@@ -9,7 +9,7 @@ namespace {
 
     // One step exchanges the supporting groups.
     constexpr float WALK_STRIDE_MM = 40.0f;
-    constexpr unsigned long WALK_SETTLE_MS = 800;
+    constexpr unsigned long WALK_SETTLE_MS = 400;
     constexpr float WALK_STEERING_TIME_MS = 180.0f;
     constexpr unsigned long BIPOD_LAND_MS = 180;
     constexpr unsigned long BIPOD_CENTER_PAIR_MS = 240;
