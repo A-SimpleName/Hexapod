@@ -4,24 +4,6 @@
 
 float defaultWaveLegOffsets[NUM_LEGS] = {0, 57.6, 115.2, 172.8, 230.4, 288.0};  
 
-static inline int mapToUs(int deg, int inMin, int inMax, int outMin, int outMax) {
-    if (deg < inMin) deg = inMin;
-    if (deg > inMax) deg = inMax;
-    long num = (long)(deg - inMin) * (outMax - outMin);
-    return outMin + (int)( num / (inMax - inMin) );
-}
-
-static inline int angleRadToUs(int leg, int joint, float q_rad) {
-    const JointCal& C = CAL[leg][joint];
-
-    float deg      = q_rad * 180.0f / 3.14159265f;
-    float servoDeg = C.offset_deg + C.dir * deg;
-
-    return mapToUs((int)servoDeg, C.min_deg, C.max_deg, C.us_min, C.us_max);
-}
-
-
-
 void waveLegs(float legOffsets[], float speed) {
     static float t = 0.0f;  // time or phase
     float mid = (FEMUR_MIN + FEMUR_MAX) / 2.0f;
@@ -39,26 +21,19 @@ void waveLegs(float legOffsets[], float speed) {
     delay(30);  // adjust delay as needed
 }
 
+static void sweepJoint(int leg, Joint joint, JointState& state, float speed, int minAngle, int maxAngle) {
+    moveServo(leg, joint, state.angle);
+    state.angle += state.dir * speed;
+    if (state.angle <= minAngle || state.angle >= maxAngle) {
+        state.dir = -state.dir;
+    }
+}
+
 void circleJerk(float speed) {
     for (int i = 0; i < NUM_LEGS; i++) {
-        moveServo(i, 0, coxa[i].angle);
-        coxa[i].angle += coxa[i].dir * speed;
-        if (coxa[i].angle <= COXA_MIN || coxa[i].angle >= COXA_MAX) {
-            coxa[i].dir = -coxa[i].dir;
-        }
-
-        moveServo(i, 1, femur[i].angle);
-        femur[i].angle += femur[i].dir * speed;
-        if (femur[i].angle <= FEMUR_MIN || femur[i].angle >= FEMUR_MAX) {
-            femur[i].dir = -femur[i].dir;
-        }
-
-        moveServo(i, 2, tibia[i].angle);
-        tibia[i].angle += tibia[i].dir * speed;
-        if (tibia[i].angle <= TIBIA_MIN || tibia[i].angle >= TIBIA_MAX) {
-            tibia[i].dir = -tibia[i].dir;
-        }
-
+        sweepJoint(i, COXA, coxa[i], speed, COXA_MIN, COXA_MAX);
+        sweepJoint(i, FEMUR, femur[i], speed, FEMUR_MIN, FEMUR_MAX);
+        sweepJoint(i, TIBIA, tibia[i], speed, TIBIA_MIN, TIBIA_MAX);
     }
     delay(7);
 }

@@ -172,17 +172,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _sendAndNotify(BuildContext context, Command command) async {
-    final ok = await udpClient.sendCommand(command);
-    var message = ok
-        ? 'Befehl ${command.id} gesendet'
-        : 'Senden von ${command.id} fehlgeschlagen';
-
-    if (command is Move && command.theta != null) {
-      message = '$message (theta: ${command.theta!.toStringAsFixed(1)}°)';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -219,9 +208,9 @@ class _HomePageState extends State<HomePage> {
                   children: [
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: () async {
+                        onPressed: () {
                           _joystickStopped = true;
-                          await _sendAndNotify(context, StopCommand());
+                          udpClient.sendCommand(StopCommand());
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red,
@@ -233,8 +222,7 @@ class _HomePageState extends State<HomePage> {
                     SizedBox(
                       height: 56,
                       child: ElevatedButton.icon(
-                        onPressed: () async => _sendAndNotify(
-                          context,
+                        onPressed: () => udpClient.sendCommand(
                           BobUpDown(
                             periodMs: _limits.limit(
                               MotionControl.bobSpeed,
@@ -259,9 +247,8 @@ class _HomePageState extends State<HomePage> {
                   listener: (StickDragDetails details) {
                     if (_joystickStopped) return;
                     final gait = _activeGait;
-                    if (gait == WalkGait.bipod &&
-                        details.x == 0 &&
-                        details.y == 0) {
+                    final isBipod = gait == WalkGait.bipod;
+                    if (isBipod && details.x == 0 && details.y == 0) {
                       return;
                     }
                     final theta =
@@ -269,32 +256,24 @@ class _HomePageState extends State<HomePage> {
                     udpClient.sendCommand(
                       Move(
                         theta: theta,
-                        stepMs: gait == WalkGait.bipod
-                            ? _limits.limit(
-                                MotionControl.bipodSpeed,
-                                _movement.bipodStepMs,
-                              )
-                            : _limits.limit(
-                                MotionControl.tripodSpeed,
-                                _movement.tripodStepMs,
-                              ),
-                        liftMm: gait == WalkGait.bipod
-                            ? _limits.limit(
-                                MotionControl.bipodHeight,
-                                _movement.bipodLiftMm,
-                              )
-                            : _limits.limit(
-                                MotionControl.tripodHeight,
-                                _movement.tripodLiftMm,
-                              ),
+                        stepMs: _limits.limit(
+                          gait.stepTimeControl,
+                          isBipod
+                              ? _movement.bipodStepMs
+                              : _movement.tripodStepMs,
+                        ),
+                        liftMm: _limits.limit(
+                          gait.stepHeightControl,
+                          isBipod
+                              ? _movement.bipodLiftMm
+                              : _movement.tripodLiftMm,
+                        ),
                         gait: gait,
                       ),
                     );
                   },
                   period: const Duration(milliseconds: 50),
-                  onStickDragEnd: () async {
-                    await udpClient.sendStopBurst();
-                  },
+                  onStickDragEnd: () => udpClient.sendStopBurst(),
                   stick: JoystickStick(
                     decoration: JoystickStickDecoration(
                       color: Colors.blueAccent,

@@ -28,14 +28,22 @@ abstract class Command {
   }
 
   static double? readDouble(dynamic value) {
-    if (value == null) {
-      return null;
-    }
     if (value is num) {
       return value.toDouble();
     }
     if (value is String) {
       return double.tryParse(value);
+    }
+    return null;
+  }
+
+  static int? _readBoundedInt(dynamic value, int min, int max) {
+    final number = readDouble(value);
+    if (number != null &&
+        number >= min &&
+        number <= max &&
+        number == number.round()) {
+      return number.toInt();
     }
     return null;
   }
@@ -50,10 +58,7 @@ class WaveLegs extends Command {
   factory WaveLegs.fromJson(Map<String, dynamic> json) {
     final offsetsRaw = json['legOffsets'];
     final offsets = offsetsRaw is List
-        ? offsetsRaw
-              .map((value) => Command.readDouble(value))
-              .whereType<double>()
-              .toList()
+        ? offsetsRaw.map(Command.readDouble).whereType<double>().toList()
         : null;
 
     return WaveLegs(
@@ -104,16 +109,13 @@ class BobUpDown extends Command {
 
   BobUpDown({this.periodMs}) : super(id: 'bob_up_down');
 
-  factory BobUpDown.fromJson(Map<String, dynamic> json) {
-    final period = Command.readDouble(json['period_ms']);
-    if (period != null &&
-        period >= minPeriodMs &&
-        period <= maxPeriodMs &&
-        period == period.round()) {
-      return BobUpDown(periodMs: period.toInt());
-    }
-    return BobUpDown();
-  }
+  factory BobUpDown.fromJson(Map<String, dynamic> json) => BobUpDown(
+    periodMs: Command._readBoundedInt(
+      json['period_ms'],
+      minPeriodMs,
+      maxPeriodMs,
+    ),
+  );
 
   @override
   Map<String, dynamic> get parameters => {
@@ -159,26 +161,18 @@ class Move extends Command {
     : super(id: gait == WalkGait.bipod ? 'move_bipod' : 'move');
 
   factory Move.fromJson(Map<String, dynamic> json) {
-    final step = Command.readDouble(json['step_ms']);
+    final step = Command._readBoundedInt(json['step_ms'], minStepMs, maxStepMs);
     final gait = json['id'] == 'move_bipod' ? WalkGait.bipod : WalkGait.tripod;
-    final lift = Command.readDouble(json['lift_mm']);
+    final lift = Command._readBoundedInt(
+      json['lift_mm'],
+      gait.minLiftMm,
+      gait.maxLiftMm,
+    );
     return Move(
       theta: Command.readDouble(json['theta']),
       gait: gait,
-      liftMm:
-          lift != null &&
-              lift >= gait.minLiftMm &&
-              lift <= gait.maxLiftMm &&
-              lift == lift.round()
-          ? lift.toInt()
-          : null,
-      stepMs:
-          step != null &&
-              step >= minStepMs &&
-              step <= maxStepMs &&
-              step == step.round()
-          ? step.toInt()
-          : null,
+      liftMm: lift,
+      stepMs: step,
     );
   }
 
